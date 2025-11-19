@@ -89,41 +89,6 @@ class Message(BaseModel):
     created_at: datetime = Field(..., description="Timestamp when this message was created")
 
 
-class World(BaseModel):
-    users: Dict[str, User] = Field(
-        default_factory=dict,
-        description="Mapping from user ID to User objects in the world"
-    )
-    subscriptions: Dict[str, Subscription] = Field(
-        default_factory=dict,
-        description="Mapping from subscription ID to Subscription objects in the world"
-    )
-    flags: Dict[str, UserFlag] = Field(
-        default_factory=dict,
-        description="Mapping from flag ID to UserFlag objects in the world"
-    )
-    pokemon: Dict[str, Pokemon] = Field(
-        default_factory=dict,
-        description="Mapping from Pokemon species ID to Pokemon objects in the world"
-    )
-    teams: Dict[str, Team] = Field(
-        default_factory=dict,
-        description="Mapping from team ID to Team objects in the world"
-    )
-    purchases: Dict[str, Purchase] = Field(
-        default_factory=dict,
-        description="Mapping from purchase ID to Purchase objects in the world"
-    )
-    engagement: Dict[str, EngagementRow] = Field(
-        default_factory=dict,
-        description="Mapping from engagement row ID to EngagementRow objects in the world"
-    )
-    messages: List[Message] = Field(
-        default_factory=list,
-        description="List of all messages posted in internal channels"
-    )
-
-
 # =========================
 # Tool IO schemas
 # =========================

@@ -1,11 +1,12 @@
-from typing import Callable, Any, Dict, List
+from typing import Callable, Any, Dict, List, Optional
 from uuid import uuid4
 from datetime import datetime
+from pathlib import Path
 
-from pydantic import ValidationError
+from pydantic import BaseModel, Field, ValidationError
+from langchain_core.tools import StructuredTool
 
 from models import (
-    World,
     User,
     Subscription,
     UserFlag,
@@ -37,19 +38,61 @@ from models import (
 )
 
 
-class WorldRuntime:
+class World(BaseModel):
     """
-    In memory world plus imperative methods that implement tool behavior.
+    In-memory world state with tool methods.
+    Auto-loads from data/world_seed.json on instantiation.
     """
 
-    def __init__(self, world: World):
-        # make a deep copy if you do not want to mutate the original
-        self.world = world.copy(deep=True)
+    users: Dict[str, User] = Field(
+        default_factory=dict,
+        description="Mapping from user ID to User objects in the world"
+    )
+    subscriptions: Dict[str, Subscription] = Field(
+        default_factory=dict,
+        description="Mapping from subscription ID to Subscription objects in the world"
+    )
+    flags: Dict[str, UserFlag] = Field(
+        default_factory=dict,
+        description="Mapping from flag ID to UserFlag objects in the world"
+    )
+    pokemon: Dict[str, Pokemon] = Field(
+        default_factory=dict,
+        description="Mapping from Pokemon species ID to Pokemon objects in the world"
+    )
+    teams: Dict[str, Team] = Field(
+        default_factory=dict,
+        description="Mapping from team ID to Team objects in the world"
+    )
+    purchases: Dict[str, Purchase] = Field(
+        default_factory=dict,
+        description="Mapping from purchase ID to Purchase objects in the world"
+    )
+    engagement: Dict[str, EngagementRow] = Field(
+        default_factory=dict,
+        description="Mapping from engagement row ID to EngagementRow objects in the world"
+    )
+    messages: List[Message] = Field(
+        default_factory=list,
+        description="List of all messages posted in internal channels"
+    )
+
+    def __init__(self, **data):
+        """
+        Load world from data/world_seed.json and make a deep copy.
+        """
+        if not data:
+            # Auto-load from seed file
+            world_seed_path = Path(__file__).parent / "data" / "world_seed.json"
+            seed_data = self.model_validate_json(world_seed_path.read_text())
+            # Make a deep copy
+            data = seed_data.model_dump()
+        super().__init__(**data)
 
     # ---------- Tool implementations ----------
 
     def list_users(self, args: ListUsersInput) -> ListUsersOutput:
-        users = list(self.world.users.values())
+        users = list(self.users.values())
 
         if args.user_ids is not None:
             ids = set(args.user_ids)
@@ -67,7 +110,7 @@ class WorldRuntime:
         return ListUsersOutput(users=users)
 
     def list_subscriptions(self, args: ListSubscriptionsInput) -> ListSubscriptionsOutput:
-        subs = list(self.world.subscriptions.values())
+        subs = list(self.subscriptions.values())
 
         if args.user_ids is not None:
             ids = set(args.user_ids)
@@ -84,11 +127,11 @@ class WorldRuntime:
     def bulk_update_user_notes(self, args: BulkUpdateUserNotesInput) -> BulkUpdateUserNotesOutput:
         updated = []
         for upd in args.updates:
-            user = self.world.users.get(upd.user_id)
+            user = self.users.get(upd.user_id)
             if user is None:
                 continue
-            user = user.copy(update={"admin_note": upd.note})
-            self.world.users[user.id] = user
+            user = user.model_copy(update={"admin_note": upd.note})
+            self.users[user.id] = user
             updated.append(user)
         return BulkUpdateUserNotesOutput(users=updated)
 
@@ -103,12 +146,12 @@ class WorldRuntime:
                 reason=spec.reason,
                 created_at=now,
             )
-            self.world.flags[flag.id] = flag
+            self.flags[flag.id] = flag
             created.append(flag)
         return CreateUserFlagsOutput(flags=created)
 
     def list_teams(self, args: ListTeamsInput) -> ListTeamsOutput:
-        teams = list(self.world.teams.values())
+        teams = list(self.teams.values())
         if args.user_ids is not None:
             ids = set(args.user_ids)
             teams = [t for t in teams if t.user_id in ids]
@@ -118,14 +161,14 @@ class WorldRuntime:
 
     def list_pokemon(self, args: ListPokemonInput) -> ListPokemonOutput:
         if args.pokemon_ids is None:
-            pokemon = list(self.world.pokemon.values())
+            pokemon = list(self.pokemon.values())
         else:
             ids = set(args.pokemon_ids)
-            pokemon = [p for p in self.world.pokemon.values() if p.id in ids]
+            pokemon = [p for p in self.pokemon.values() if p.id in ids]
         return ListPokemonOutput(pokemon=pokemon)
 
     def list_purchases(self, args: ListPurchasesInput) -> ListPurchasesOutput:
-        purchases = list(self.world.purchases.values())
+        purchases = list(self.purchases.values())
         if args.user_ids is not None:
             ids = set(args.user_ids)
             purchases = [p for p in purchases if p.user_id in ids]
@@ -134,7 +177,7 @@ class WorldRuntime:
         return ListPurchasesOutput(purchases=purchases)
 
     def list_engagement(self, args: ListEngagementInput) -> ListEngagementOutput:
-        rows = list(self.world.engagement.values())
+        rows = list(self.engagement.values())
         if args.user_ids is not None:
             ids = set(args.user_ids)
             rows = [r for r in rows if r.user_id in ids]
@@ -151,11 +194,11 @@ class WorldRuntime:
             text=args.text,
             created_at=datetime.utcnow(),
         )
-        self.world.messages.append(msg)
+        self.messages.append(msg)
         return PostMessageOutput(message=msg)
 
     def list_messages(self, args: ListMessagesInput) -> ListMessagesOutput:
-        msgs = [m for m in self.world.messages if m.channel == args.channel]
+        msgs = [m for m in self.messages if m.channel == args.channel]
         msgs = sorted(msgs, key=lambda m: m.created_at, reverse=True)
         return ListMessagesOutput(messages=msgs[: args.limit])
 
@@ -257,4 +300,34 @@ class WorldRuntime:
                     },
                 }
             )
+        return tools
+
+    def to_langchain_tools(self) -> List[StructuredTool]:
+        """
+        Build LangChain StructuredTool instances from the tool map.
+        Each tool wraps the corresponding method and uses Pydantic models for validation.
+        """
+        tools = []
+        for name, meta in self.tool_map().items():
+            input_model = meta["input_model"]
+            func = meta["func"]
+            description = meta["description"]
+
+            # Create a wrapper that converts dict args to Pydantic input
+            def make_tool_func(f: Callable, in_model):
+                def tool_func(**kwargs) -> Any:
+                    args = in_model(**kwargs)
+                    result = f(args)
+                    # Return the Pydantic model output as a dict
+                    return result.model_dump()
+                return tool_func
+
+            tool = StructuredTool(
+                name=name,
+                description=description,
+                func=make_tool_func(func, input_model),
+                args_schema=input_model,
+            )
+            tools.append(tool)
+
         return tools

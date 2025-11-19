@@ -105,22 +105,18 @@ If your script uses different paths, adjust and rerun. The important part is tha
 In your agent or eval harness you typically:
 
 ```python
-from pathlib import Path
-from models import World
+from world_runtime import World
 
-# Load the frozen world seed
-world_seed_path = Path("data/world_seed.json")
-world = World.model_validate_json(world_seed_path.read_text())
+# Create a fresh world instance - automatically loads from data/world_seed.json
+world = World()
 
-# Optionally wrap it with a runtime that exposes tool methods
-# from runtime import WorldRuntime
-# runtime = WorldRuntime(world)
-# tools = runtime.to_openai_tools()  # or map to LangChain tools
+# The World instance has all tool methods available
+tools = world.to_openai_tools()  # or map to LangChain tools
 ```
 
 When running evals you will:
 
-1. Start from a fresh deserialized `World` (so each run is independent).
+1. Start from a fresh `World()` instance (so each run is independent).
 2. Give your agent access to tools backed by that `World`.
 3. After the run, inspect the mutated `World` to compute scores.
 
@@ -132,12 +128,12 @@ Suggested structure as this project grows:
 
 ```text
 .
-├── models.py                 # Pydantic models and tool IO schemas
+├── models.py                 # Pydantic models for entities and tool IO schemas
+├── world_runtime.py          # World class with tool implementations
 ├── generate_world.py         # World seeding script
 ├── raw_pokemon_data.json     # Raw Pokémon data
 ├── data/
 │   └── world_seed.json       # Generated, deterministic world snapshot
-├── runtime.py                # (optional) WorldRuntime tool implementation
 ├── scenarios/
 │   └── *.py                  # Scenario builders and eval logic
 └── README.md
@@ -145,7 +141,6 @@ Suggested structure as this project grows:
 
 You can evolve this structure as you add:
 
-* `runtime.py` for tool implementations
 * `scenarios/` for eval tasks
 
 ---
