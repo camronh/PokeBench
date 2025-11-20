@@ -7,6 +7,10 @@ from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict, Annotated
 from typing import Literal
 import operator
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 # Define state for the agent
@@ -36,7 +40,7 @@ def create_poke_agent(tools: list[StructuredTool]):
     """
     # Initialize the model
     model = ChatOpenAI(
-        model="gpt-5.1-mini",
+        model="gpt-5-mini",
     )
 
     # Create tool lookup
