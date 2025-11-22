@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from world_runtime import World
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import SystemMessage, HumanMessage, AnyMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AnyMessage, ToolMessage, AIMessage
 from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict, Annotated
 from typing import Literal
@@ -138,12 +138,13 @@ class Agent:
 
     async def run(self, prompt: str):
         runner = create_poke_agent(tools=self.tools)
-        self.output = await runner.ainvoke({"messages": [HumanMessage(content=prompt)]})
-        return self.output
+        self.final_agent_state = await runner.ainvoke({"messages": [HumanMessage(content=prompt)]})
+        self.output: AIMessage = self.final_agent_state["messages"][-1]
+        return self.output.content
 
 
     @staticmethod
-    async def create_and_run(prompt: str, response_schema: BaseModel = None) :
+    async def create_and_run(prompt: str, response_schema: BaseModel = None):
         agent = Agent(response_schema=response_schema)
         await agent.run(prompt)
         return agent
