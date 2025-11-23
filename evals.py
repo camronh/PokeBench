@@ -1,6 +1,12 @@
 from twevals import eval, EvalContext
 from agent import Agent
 from pydantic import BaseModel, Field
+from models import (
+    ListEngagementInput,
+    ListSubscriptionsInput,
+    ListTeamsInput,
+    ListUsersInput,
+)
 from world_runtime import World
 
 
@@ -41,7 +47,11 @@ class Name(BaseModel):
 async def get_user_by_id(ctx: EvalContext):
 
     # Calculate ground truth
-    ground_truth = Name(full_name=ctx.original_world.users["user_00000"].name)
+    user_result = ctx.original_world.list_users(
+        ListUsersInput(user_ids=["user_00000"])
+    ).users
+
+    ground_truth = Name(full_name=user_result[0].name)
     ctx.reference = ground_truth.model_dump_json()
 
     # Validate agent responded with tool calls
@@ -71,11 +81,10 @@ class SubscriptionPlan(BaseModel):
 async def get_subscription_plan(ctx: EvalContext):
 
     # Calculate ground truth
-    user_subs = [
-        sub
-        for sub in ctx.original_world.subscriptions.values()
-        if sub.user_id == "user_00006"
-    ]
+    user_subs = ctx.original_world.list_subscriptions(
+        ListSubscriptionsInput(user_ids=["user_00006"], status="active")
+    ).subscriptions
+
     ground_truth = SubscriptionPlan(plan=user_subs[0].plan)
     ctx.reference = ground_truth.model_dump_json()
 
@@ -104,11 +113,9 @@ class TeamCount(BaseModel):
 async def count_user_teams(ctx: EvalContext):
 
     # Calculate ground truth - count teams for specific user
-    user_teams = [
-        team
-        for team in ctx.original_world.teams.values()
-        if team.user_id == "user_00042"
-    ]
+    user_teams = ctx.original_world.list_teams(
+        ListTeamsInput(user_ids=["user_00042"])
+    ).teams
     ground_truth = TeamCount(count=len(user_teams))
     ctx.reference = ground_truth.model_dump_json()
 
@@ -137,17 +144,19 @@ class UserCount(BaseModel):
 async def count_ultra_subs_by_region(ctx: EvalContext):
 
     # Calculate ground truth
-    # Get all LATAM users
-    latam_user_ids = {
-        user.id for user in ctx.original_world.users.values() if user.region == "LATAM"
-    }
+    latam_users = ctx.original_world.list_users(
+        ListUsersInput(region="LATAM")
+    ).users
+    if not latam_users:
+        raise ValueError("No LATAM users available for ground truth calculation")
 
-    # Get all users with active ultra subscriptions
-    ultra_user_ids = {
-        sub.user_id
-        for sub in ctx.original_world.subscriptions.values()
-        if sub.plan == "ultra" and sub.status == "active"
-    }
+    latam_user_ids = {user.id for user in latam_users}
+
+    ultra_subs = ctx.original_world.list_subscriptions(
+        ListSubscriptionsInput(plan="ultra", status="active")
+    ).subscriptions
+
+    ultra_user_ids = {sub.user_id for sub in ultra_subs}
 
     # Count how many LATAM users have active ultra subscriptions
     count = len(latam_user_ids & ultra_user_ids)
@@ -178,11 +187,10 @@ async def create_churn_risk_flag(ctx: EvalContext):
     expected_flag_type = "churn_risk"
 
     # Get ground truth engagement data for validation
-    user_engagement = [
-        eng
-        for eng in ctx.original_world.engagement.values()
-        if eng.user_id == target_user_id
-    ]
+    user_engagement = ctx.original_world.list_engagement(
+        ListEngagementInput(user_ids=[target_user_id])
+    ).engagement
+
     total_sessions = sum(eng.sessions for eng in user_engagement)
     total_minutes = sum(eng.minutes_played for eng in user_engagement)
 
@@ -203,19 +211,18 @@ async def create_churn_risk_flag(ctx: EvalContext):
         if flag.user_id == target_user_id and flag.flag_type == expected_flag_type
     ]
 
-    flag = agent_flags[0]
-
-    reason_lower = flag.reason.lower()
-
     # Set context output before assertions
     ctx.output = {
-        "flag_created": True,
-        "user_id": flag.user_id,
-        "flag_type": flag.flag_type,
-        "reason": flag.reason,
+        "flag_created": bool(agent_flags),
+        "user_id": agent_flags[0].user_id if agent_flags else None,
+        "flag_type": agent_flags[0].flag_type if agent_flags else None,
+        "reason": agent_flags[0].reason if agent_flags else None,
     }
 
     assert len(agent_flags) > 0, f"No churn_risk flag created for {target_user_id}"
+
+    flag = agent_flags[0]
+    reason_lower = flag.reason.lower()
 
     # Validate flag has a substantive reason
     assert len(flag.reason) > 20, f"Flag reason too short: '{flag.reason}'"
