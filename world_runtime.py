@@ -89,7 +89,7 @@ class World(BaseModel):
             data = seed_data.model_dump()
         super().__init__(**data)
 
-    # ---------- Tool implementations ----------
+    # ---------- Tool Methods ----------
 
     def list_users(self, args: ListUsersInput) -> ListUsersOutput:
         users = list(self.users.values())

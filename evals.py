@@ -30,6 +30,7 @@ twevals_defaults = {
 class Name(BaseModel):
     full_name: str = Field(..., description="The full name of the user, verbatim")
 
+
 @eval(
     input={
         "prompt": "What name belongs to user user_00000?",
@@ -58,6 +59,7 @@ class SubscriptionPlan(BaseModel):
     plan: str = Field(
         ..., description="The subscription plan name (e.g., free, premium, ultra)"
     )
+
 
 @eval(
     input={
@@ -91,6 +93,7 @@ async def get_subscription_plan(ctx: EvalContext):
 class TeamCount(BaseModel):
     count: int = Field(..., description="The number of teams the user has created")
 
+
 @eval(
     input={
         "prompt": "How many teams does user_00042 have?",
@@ -102,7 +105,9 @@ async def count_user_teams(ctx: EvalContext):
 
     # Calculate ground truth - count teams for specific user
     user_teams = [
-        team for team in ctx.original_world.teams.values() if team.user_id == "user_00042"
+        team
+        for team in ctx.original_world.teams.values()
+        if team.user_id == "user_00042"
     ]
     ground_truth = TeamCount(count=len(user_teams))
     ctx.reference = ground_truth.model_dump_json()
@@ -120,6 +125,7 @@ async def count_user_teams(ctx: EvalContext):
 
 class UserCount(BaseModel):
     count: int = Field(..., description="The number of users matching the criteria")
+
 
 @eval(
     input={
@@ -157,3 +163,65 @@ async def count_ultra_subs_by_region(ctx: EvalContext):
     assert (
         ctx.output["count"] == ground_truth.count
     ), f"Count mismatch: got {ctx.output['count']}, expected {ground_truth.count}"
+
+
+@eval(
+    input={
+        "prompt": "Create a churn_risk flag for user_00005 with a reason based on their engagement data. Look up their engagement metrics and provide a specific reason.",
+        "response_schema": None,
+    },
+    dataset="medium",
+)
+async def create_churn_risk_flag(ctx: EvalContext):
+    # Calculate expected flag details
+    target_user_id = "user_00005"
+    expected_flag_type = "churn_risk"
+
+    # Get ground truth engagement data for validation
+    user_engagement = [
+        eng
+        for eng in ctx.original_world.engagement.values()
+        if eng.user_id == target_user_id
+    ]
+    total_sessions = sum(eng.sessions for eng in user_engagement)
+    total_minutes = sum(eng.minutes_played for eng in user_engagement)
+
+    # Set context reference before assertions
+    ctx.reference = {
+        "expected_user_id": target_user_id,
+        "expected_flag_type": expected_flag_type,
+        "engagement_context": {
+            "total_sessions": total_sessions,
+            "total_minutes": total_minutes,
+        },
+    }
+
+    # Check that flag was created in the agent's world
+    agent_flags = [
+        flag
+        for flag in ctx.agent.world.flags.values()
+        if flag.user_id == target_user_id and flag.flag_type == expected_flag_type
+    ]
+
+    flag = agent_flags[0]
+
+    reason_lower = flag.reason.lower()
+
+    # Set context output before assertions
+    ctx.output = {
+        "flag_created": True,
+        "user_id": flag.user_id,
+        "flag_type": flag.flag_type,
+        "reason": flag.reason,
+    }
+
+    assert len(agent_flags) > 0, f"No churn_risk flag created for {target_user_id}"
+
+    # Validate flag has a substantive reason
+    assert len(flag.reason) > 20, f"Flag reason too short: '{flag.reason}'"
+
+    # Check that reason mentions engagement or activity
+    assert any(
+        keyword in reason_lower
+        for keyword in ["engagement", "session", "minute", "play", "activity", "low"]
+    ), f"Flag reason doesn't mention engagement metrics: '{flag.reason}'"
