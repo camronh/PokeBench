@@ -16,5 +16,5 @@ uv run twevals run evals.py::get_user_by_id  --json  # Run specific eval by func
 
 uv run twevals list evals.py --json  # Get a list of evals prompts and ids instantly without running them
 
-uv run twevals run evals.py --json --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
+uv run twevals run evals.py --json -c 5 --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
 ```

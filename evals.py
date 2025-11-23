@@ -10,10 +10,14 @@ async def target(ctx: EvalContext):
     ctx.original_world = World()
 
     # Run agent
-    ctx.agent = await Agent.create_and_run(
-        ctx.input["prompt"], ctx.input["response_schema"]
-    )
-    ctx.output = ctx.agent.output.tool_calls[0]["args"]
+    if ctx.input["response_schema"]:
+        ctx.agent = await Agent.create_and_run(
+            ctx.input["prompt"], ctx.input["response_schema"]
+        )
+        ctx.output = ctx.agent.output.tool_calls[0]["args"]
+    else:
+        ctx.agent = await Agent.create_and_run(ctx.input["prompt"])
+        ctx.output = ctx.agent.output.content
 
 
 # Set target as the global target
