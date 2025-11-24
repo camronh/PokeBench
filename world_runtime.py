@@ -1,6 +1,6 @@
 from typing import Callable, Any, Dict, List, Optional
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationError
@@ -36,6 +36,60 @@ from models import (
     ListMessagesInput,
     ListMessagesOutput,
 )
+
+
+def parse_date_string(date_str: Optional[str]) -> Optional[date]:
+    """Parse a date string into a date object.
+
+    Supports formats:
+    - "2025-09-01" (ISO date)
+    - "2025-09-01T00:00:00" (ISO datetime, extracts date)
+    - "2025-09-01T00:00:00Z" (ISO datetime with timezone)
+    """
+    if date_str is None:
+        return None
+
+    # Try parsing as datetime first (handles both datetime and date formats)
+    try:
+        # This handles ISO formats including datetime strings
+        dt = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+        return dt.date()
+    except ValueError:
+        # If that fails, try parsing as just a date
+        try:
+            return date.fromisoformat(date_str)
+        except ValueError:
+            raise ValueError(
+                f"Invalid date format: {date_str}. "
+                f"Expected ISO format like '2025-09-01' or '2025-09-01T00:00:00'"
+            )
+
+
+def parse_datetime_string(datetime_str: Optional[str]) -> Optional[datetime]:
+    """Parse a datetime string into a datetime object.
+
+    Supports formats:
+    - "2025-09-01" (date only, sets time to midnight)
+    - "2025-09-01T00:00:00" (ISO datetime)
+    - "2025-09-01T00:00:00Z" (ISO datetime with timezone)
+    """
+    if datetime_str is None:
+        return None
+
+    try:
+        # Handle timezone indicator 'Z'
+        normalized = datetime_str.replace('Z', '+00:00')
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        # Try parsing as just a date, then convert to datetime at midnight
+        try:
+            d = date.fromisoformat(datetime_str)
+            return datetime.combine(d, datetime.min.time())
+        except ValueError:
+            raise ValueError(
+                f"Invalid datetime format: {datetime_str}. "
+                f"Expected ISO format like '2025-09-01T00:00:00' or '2025-09-01'"
+            )
 
 
 class World(BaseModel):
@@ -105,7 +159,8 @@ class World(BaseModel):
             users = [u for u in users if u.region == args.region]
 
         if args.signed_up_after is not None:
-            users = [u for u in users if u.signup_date > args.signed_up_after]
+            cutoff_date = parse_date_string(args.signed_up_after)
+            users = [u for u in users if u.signup_date > cutoff_date]
 
         return ListUsersOutput(users=users)
 
@@ -156,7 +211,8 @@ class World(BaseModel):
             ids = set(args.user_ids)
             teams = [t for t in teams if t.user_id in ids]
         if args.created_after is not None:
-            teams = [t for t in teams if t.created_at > args.created_after]
+            cutoff_date = parse_date_string(args.created_after)
+            teams = [t for t in teams if t.created_at > cutoff_date]
         return ListTeamsOutput(teams=teams)
 
     def list_pokemon(self, args: ListPokemonInput) -> ListPokemonOutput:
@@ -173,7 +229,8 @@ class World(BaseModel):
             ids = set(args.user_ids)
             purchases = [p for p in purchases if p.user_id in ids]
         if args.purchased_after is not None:
-            purchases = [p for p in purchases if p.purchased_at > args.purchased_after]
+            cutoff_datetime = parse_datetime_string(args.purchased_after)
+            purchases = [p for p in purchases if p.purchased_at > cutoff_datetime]
         return ListPurchasesOutput(purchases=purchases)
 
     def list_engagement(self, args: ListEngagementInput) -> ListEngagementOutput:
@@ -182,9 +239,11 @@ class World(BaseModel):
             ids = set(args.user_ids)
             rows = [r for r in rows if r.user_id in ids]
         if args.date_from is not None:
-            rows = [r for r in rows if r.date >= args.date_from]
+            from_date = parse_date_string(args.date_from)
+            rows = [r for r in rows if r.date >= from_date]
         if args.date_to is not None:
-            rows = [r for r in rows if r.date <= args.date_to]
+            to_date = parse_date_string(args.date_to)
+            rows = [r for r in rows if r.date <= to_date]
         return ListEngagementOutput(engagement=rows)
 
     def post_message(self, args: PostMessageInput) -> PostMessageOutput:

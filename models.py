@@ -108,9 +108,9 @@ class ListUsersInput(BaseModel):
         default=None,
         description="Optional region filter, for example NA or EU"
     )
-    signed_up_after: Optional[DateType] = Field(
+    signed_up_after: Optional[str] = Field(
         default=None,
-        description="If provided, only include users whose signup_date is after this date"
+        description="If provided, only include users whose signup_date is after this date (ISO format, e.g. '2025-09-01')"
     )
 
 
@@ -195,9 +195,9 @@ class ListTeamsInput(BaseModel):
         default=None,
         description="Optional list of user IDs to filter teams by owner"
     )
-    created_after: Optional[DateType] = Field(
+    created_after: Optional[str] = Field(
         default=None,
-        description="If provided, only include teams created after this date"
+        description="If provided, only include teams created after this date (ISO format, e.g. '2025-07-01')"
     )
 
 
@@ -231,9 +231,9 @@ class ListPurchasesInput(BaseModel):
         default=None,
         description="Optional list of user IDs to filter purchases by owner"
     )
-    purchased_after: Optional[datetime] = Field(
+    purchased_after: Optional[str] = Field(
         default=None,
-        description="If provided, only include purchases made after this timestamp"
+        description="If provided, only include purchases made after this timestamp (ISO format, e.g. '2025-09-01' or '2025-09-01T00:00:00')"
     )
 
 
@@ -251,13 +251,13 @@ class ListEngagementInput(BaseModel):
         default=None,
         description="Optional list of user IDs to filter engagement rows by"
     )
-    date_from: Optional[DateType] = Field(
+    date_from: Optional[str] = Field(
         default=None,
-        description="If provided, only include engagement rows on or after this date"
+        description="If provided, only include engagement rows on or after this date (ISO format, e.g. '2025-11-06')"
     )
-    date_to: Optional[DateType] = Field(
+    date_to: Optional[str] = Field(
         default=None,
-        description="If provided, only include engagement rows on or before this date"
+        description="If provided, only include engagement rows on or before this date (ISO format, e.g. '2025-11-19')"
     )
 
 

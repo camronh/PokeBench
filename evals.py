@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from twevals import eval, EvalContext
 from agent import Agent
@@ -13,6 +14,25 @@ from models import (
     ListUsersInput,
 )
 from world_runtime import World
+
+
+def get_trace(messages) -> str:
+    """Parse LangChain message array into readable trace."""
+
+    lines = []
+    for message in messages:
+        if isinstance(message, HumanMessage):
+            lines.append(f"Human: {message.content}")
+        elif isinstance(message, AIMessage):
+            lines.append(f"AI: {message.content}")
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    lines.append(f"    {tool_call['name']}: {tool_call['args']}")
+        elif isinstance(message, ToolMessage):
+            lines.append(
+                f"Tool: {message.content[:500]}... *Truncated to manage token limits*"
+            )
+    return "\n----\n".join(lines)
 
 
 # Target function
@@ -29,6 +49,8 @@ async def target(ctx: EvalContext):
     else:
         ctx.agent = await Agent.create_and_run(ctx.input["prompt"])
         ctx.output = ctx.agent.output.content
+
+    ctx.run_data["trace"] = get_trace(ctx.agent.final_agent_state["messages"])
 
 
 # Set target as the global target
@@ -135,10 +157,12 @@ async def eu_subscribers_with_recent_team(ctx: EvalContext):
         ListUsersInput(region="EU", segment="subscriber")
     ).users
     teams_after_cutoff = ctx.original_world.list_teams(
-        ListTeamsInput(created_after=cutoff_date)
+        ListTeamsInput(created_after=cutoff_date.isoformat())
     ).teams
     subscriber_ids = {user.id for user in eu_subscribers}
-    ids_with_recent_team = {team.user_id for team in teams_after_cutoff if team.user_id in subscriber_ids}
+    ids_with_recent_team = {
+        team.user_id for team in teams_after_cutoff if team.user_id in subscriber_ids
+    }
 
     ground_truth = UserCount(count=len(ids_with_recent_team))
     ctx.reference = ground_truth.model_dump_json()
@@ -203,14 +227,19 @@ async def create_churn_risk_flag(ctx: EvalContext):
     target_user_id = "user_00005"
     expected_flag_type = "churn_risk"
 
-    user_engagement = ctx.original_world.list_engagement(ListEngagementInput(user_ids=[target_user_id])).engagement
+    user_engagement = ctx.original_world.list_engagement(
+        ListEngagementInput(user_ids=[target_user_id])
+    ).engagement
 
     latest_date = max(row.date for row in user_engagement)
     window_start = latest_date - timedelta(days=13)
     window_rows = ctx.original_world.list_engagement(
-        ListEngagementInput(user_ids=[target_user_id], date_from=window_start, date_to=latest_date)
+        ListEngagementInput(
+            user_ids=[target_user_id],
+            date_from=window_start.isoformat(),
+            date_to=latest_date.isoformat(),
+        )
     ).engagement
-
 
     total_sessions = sum(eng.sessions for eng in window_rows)
     total_minutes = sum(eng.minutes_played for eng in window_rows)
@@ -269,16 +298,21 @@ async def na_whale_lowest_ranked_matches(ctx: EvalContext):
     window_end = date(2025, 11, 19)
     whale_ids = [user.id for user in whales]
     engagement_rows = ctx.original_world.list_engagement(
-        ListEngagementInput(user_ids=whale_ids, date_from=window_start, date_to=window_end)
+        ListEngagementInput(
+            user_ids=whale_ids,
+            date_from=window_start.isoformat(),
+            date_to=window_end.isoformat(),
+        )
     ).engagement
-
 
     ranked_totals = defaultdict(int)
     for row in engagement_rows:
         ranked_totals[row.user_id] += row.ranked_matches
 
     min_ranked = min(ranked_totals.values())
-    lowest_users = [user for user in whales if ranked_totals.get(user.id, 0) == min_ranked]
+    lowest_users = [
+        user for user in whales if ranked_totals.get(user.id, 0) == min_ranked
+    ]
     earliest_user = min(lowest_users, key=lambda user: user.signup_date)
 
     ground_truth = UserIdentity(user_id=earliest_user.id, full_name=earliest_user.name)
@@ -308,7 +342,7 @@ async def apac_top_spender_after_sept(ctx: EvalContext):
 
     apac_lookup = {user.id: user for user in apac_users}
     purchases = ctx.original_world.list_purchases(
-        ListPurchasesInput(purchased_after=datetime(2025, 9, 1))
+        ListPurchasesInput(purchased_after="2025-09-01")
     ).purchases
 
     spend_totals = defaultdict(float)
@@ -349,19 +383,29 @@ async def latam_ultra_zero_ranked(ctx: EvalContext):
     ultra_active = ctx.original_world.list_subscriptions(
         ListSubscriptionsInput(plan="ultra", status="active")
     ).subscriptions
-    ultra_latam_ids = {sub.user_id for sub in ultra_active if sub.user_id in {user.id for user in latam_users}}
+    ultra_latam_ids = {
+        sub.user_id
+        for sub in ultra_active
+        if sub.user_id in {user.id for user in latam_users}
+    }
 
     window_start = date(2025, 11, 13)
     window_end = date(2025, 11, 19)
     engagement_rows = ctx.original_world.list_engagement(
-        ListEngagementInput(user_ids=list(ultra_latam_ids), date_from=window_start, date_to=window_end)
+        ListEngagementInput(
+            user_ids=list(ultra_latam_ids),
+            date_from=window_start.isoformat(),
+            date_to=window_end.isoformat(),
+        )
     ).engagement
 
     ranked_totals = defaultdict(int)
     for row in engagement_rows:
         ranked_totals[row.user_id] += row.ranked_matches
 
-    eligible_ids = [user_id for user_id in ultra_latam_ids if ranked_totals.get(user_id, 0) == 0]
+    eligible_ids = [
+        user_id for user_id in ultra_latam_ids if ranked_totals.get(user_id, 0) == 0
+    ]
     ground_truth = UserCount(count=len(eligible_ids))
     ctx.reference = ground_truth.model_dump_json()
 
@@ -391,21 +435,28 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
         ListSubscriptionsInput(plan="premium", status="active")
     ).subscriptions
     premium_whale_ids = {
-        sub.user_id for sub in premium_active if sub.user_id in {user.id for user in apac_whales}
+        sub.user_id
+        for sub in premium_active
+        if sub.user_id in {user.id for user in apac_whales}
     }
 
     required_note = "APAC premium whale outreach 2025-11"
-    ctx.reference = {"eligible_user_ids": sorted(premium_whale_ids), "note": required_note}
+    ctx.reference = {
+        "eligible_user_ids": sorted(premium_whale_ids),
+        "note": required_note,
+    }
 
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=list(premium_whale_ids))
     ).users
-    updated_ids = [user.id for user in updated_users if user.admin_note == required_note]
+    updated_ids = [
+        user.id for user in updated_users if user.admin_note == required_note
+    ]
 
     ctx.output = {"updated_ids": sorted(updated_ids), "note": required_note}
 
-    assert (
-        len(updated_ids) == len(premium_whale_ids)
+    assert len(updated_ids) == len(
+        premium_whale_ids
     ), f"Expected notes updated for {len(premium_whale_ids)} users, got {len(updated_ids)}"
 
 
@@ -423,19 +474,29 @@ async def post_latam_ultra_zero_ranked_alert(ctx: EvalContext):
     ultra_active = ctx.original_world.list_subscriptions(
         ListSubscriptionsInput(plan="ultra", status="active")
     ).subscriptions
-    ultra_latam_ids = {sub.user_id for sub in ultra_active if sub.user_id in {user.id for user in latam_users}}
+    ultra_latam_ids = {
+        sub.user_id
+        for sub in ultra_active
+        if sub.user_id in {user.id for user in latam_users}
+    }
 
     window_start = date(2025, 11, 13)
     window_end = date(2025, 11, 19)
     engagement_rows = ctx.original_world.list_engagement(
-        ListEngagementInput(user_ids=list(ultra_latam_ids), date_from=window_start, date_to=window_end)
+        ListEngagementInput(
+            user_ids=list(ultra_latam_ids),
+            date_from=window_start.isoformat(),
+            date_to=window_end.isoformat(),
+        )
     ).engagement
 
     ranked_totals = defaultdict(int)
     for row in engagement_rows:
         ranked_totals[row.user_id] += row.ranked_matches
 
-    eligible_ids = [user_id for user_id in ultra_latam_ids if ranked_totals.get(user_id, 0) == 0]
+    eligible_ids = [
+        user_id for user_id in ultra_latam_ids if ranked_totals.get(user_id, 0) == 0
+    ]
     expected_count = len(eligible_ids)
 
     ctx.reference = {
@@ -463,4 +524,6 @@ async def post_latam_ultra_zero_ranked_alert(ctx: EvalContext):
         "message_text": alert_message.text if alert_message else None,
     }
 
-    assert alert_message is not None, "No alert message posted with the expected count and date range in #ops-alerts"
+    assert (
+        alert_message is not None
+    ), "No alert message posted with the expected count and date range in #ops-alerts"
