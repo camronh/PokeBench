@@ -197,7 +197,7 @@ async def count_ultra_subs_by_region(ctx: EvalContext):
         "response_schema": None,
     },
     dataset="medium",
-    label="mutation",
+    labels=["mutation"],
 )
 async def create_churn_risk_flag(ctx: EvalContext):
     target_user_id = "user_00005"
@@ -380,7 +380,7 @@ async def latam_ultra_zero_ranked(ctx: EvalContext):
         "response_schema": None,
     },
     dataset="hard",
-    label="mutation",
+    labels=["mutation"],
 )
 async def update_apac_premium_whale_notes(ctx: EvalContext):
     apac_whales = ctx.original_world.list_users(
@@ -415,7 +415,7 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
         "response_schema": None,
     },
     dataset="hard",
-    label="mutation",
+    labels=["mutation"],
 )
 async def post_latam_ultra_zero_ranked_alert(ctx: EvalContext):
     latam_users = ctx.original_world.list_users(ListUsersInput(region="LATAM")).users

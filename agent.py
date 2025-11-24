@@ -40,8 +40,8 @@ def create_poke_agent(tools: list[StructuredTool]):
     """
     # Initialize the model
     model = ChatOpenAI(
-        model="gpt-5-mini",
-        reasoning_effort="minimal",
+        model="gpt-5.1",
+        reasoning_effort="none",
     )
 
     # Create tool lookup
