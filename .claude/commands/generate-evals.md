@@ -68,6 +68,8 @@ async def eval_name(ctx: EvalContext):
 
 **Use `raise ValueError()` for environment/setup issues (errors):**
 
+Error will be caught automatically by twevals and will be considered an error so no need to raise an exception.
+
 - Data not found in seed (e.g., "User not found")
 - No eligible data for ground truth calculation
 - Invalid test setup
