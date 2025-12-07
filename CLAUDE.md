@@ -4,19 +4,19 @@ Write and run scripts if you need to but do not delete them when youre done.
 
 Use uv for package management and running code
 
-We use the twevals library to run evals. I made and maintain the twevals library and am the sole user at the moment. So I may ask you to help make it better. It exists in the evalkit directory.
+We use the ezvals library to run evals. I made and maintain the ezvals library and am the sole user at the moment. So I may ask you to help make it better. It exists in the evalkit directory.
 
-Twevals run commands:
+Ezvals run commands:
 ```bash
-uv run twevals run evals.py -c 5  --json # Run all evals
+uv run ezvals run evals.py -c 5  # Run all evals
 
-uv run twevals run evals.py --dataset easy -c 5 --json # Run easy evals only
+uv run ezvals run evals.py --dataset easy -c 5  # Run easy evals only
 
-uv run twevals run evals.py::get_user_by_id  --json  # Run specific eval by function name
+uv run ezvals run evals.py::get_user_by_id  # Run specific eval by function name
 
-uv run twevals run evals.py --list --json  # Get a list of evals prompts and ids instantly without running them
+uv run ezvals run evals.py -c 5 --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
 
-uv run twevals run evals.py --json -c 5 --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
+uv run ezvals run evals.py --limit 5  # Run only the first 5 evals
 
-uv run twevals run evals.py --limit 5 --json  # Run only the first 5 evals
+uv run ezvals serve evals.py  # Serve web UI to browse results
 ```

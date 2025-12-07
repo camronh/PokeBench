@@ -1,8 +1,8 @@
+import re
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta, timezone
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from datetime import date, timedelta
 
-from twevals import eval, EvalContext
+from ezvals import eval, EvalContext
 from agent import Agent
 from pydantic import BaseModel, Field
 from models import (
@@ -16,23 +16,10 @@ from models import (
 from world_runtime import World
 
 
-def get_trace(messages) -> str:
-    """Parse LangChain message array into readable trace."""
-
-    lines = []
-    for message in messages:
-        if isinstance(message, HumanMessage):
-            lines.append(f"Human: {message.content}")
-        elif isinstance(message, AIMessage):
-            lines.append(f"AI: {message.content}")
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    lines.append(f"    {tool_call['name']}: {tool_call['args']}")
-        elif isinstance(message, ToolMessage):
-            lines.append(
-                f"Tool: {message.content[:500]}... *Truncated to manage token limits*"
-            )
-    return "\n----\n".join(lines)
+def contains_number(text: str, number: int) -> bool:
+    """Check if text contains the number as a whole word (not part of another number)."""
+    pattern = rf"\b{number}\b"
+    return bool(re.search(pattern, text))
 
 
 # Target function
@@ -45,16 +32,24 @@ async def target(ctx: EvalContext):
         ctx.agent = await Agent.create_and_run(
             ctx.input["prompt"], ctx.input["response_schema"]
         )
-        ctx.output = ctx.agent.output.tool_calls[0]["args"]
+        if ctx.agent.output.tool_calls:
+            output = ctx.agent.output.tool_calls[0]["args"]
+        else:
+            output = ctx.agent.output.content
     else:
         ctx.agent = await Agent.create_and_run(ctx.input["prompt"])
-        ctx.output = ctx.agent.output.content
+        output = ctx.agent.output.content
 
-    ctx.run_data["trace"] = get_trace(ctx.agent.final_agent_state["messages"])
+    trace_url = f"https://smith.langchain.com/o/d967989d-4221-53db-b0a5-665b504acba2/projects/p/0da7cda2-d355-4819-b61d-d67d595e4f29/r/{ctx.agent.trace_id}"
+    ctx.store(
+        output=output,
+        trace_url=trace_url,
+        messages=ctx.agent.final_agent_state["messages"]
+    )
 
 
 # Set target as the global target
-twevals_defaults = {
+ezvals_defaults = {
     "target": target,
 }
 
@@ -143,7 +138,7 @@ async def earliest_na_three_team_user(ctx: EvalContext):
 
     earliest = min(candidates, key=lambda user: user.signup_date)
     ground_truth = Name(full_name=earliest.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -178,7 +173,7 @@ async def earliest_latam_active_plan(ctx: EvalContext):
 
     latest_sub = max(user_active_subs, key=lambda sub: sub.started_at)
     ground_truth = SubscriptionPlan(plan=latest_sub.plan)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -211,7 +206,7 @@ async def eu_subscribers_with_recent_team(ctx: EvalContext):
     }
 
     ground_truth = UserCount(count=len(ids_with_recent_team))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -239,7 +234,7 @@ async def na_free_without_teams(ctx: EvalContext):
     count = sum(1 for user in na_free if team_counts[user.id] == 0)
 
     ground_truth = UserCount(count=count)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -269,7 +264,7 @@ async def apac_whales_with_active_subs(ctx: EvalContext):
     active_ids = {sub.user_id for sub in active_subs if sub.user_id in whale_ids}
 
     ground_truth = UserCount(count=len(active_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -299,7 +294,7 @@ async def latam_subscribers_with_post_sept_team(ctx: EvalContext):
     team_user_ids = {team.user_id for team in teams if team.user_id in latam_ids}
 
     ground_truth = UserCount(count=len(team_user_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -326,7 +321,7 @@ async def eu_users_with_three_teams(ctx: EvalContext):
     count = sum(1 for user in eu_users if team_counts[user.id] == 3)
 
     ground_truth = UserCount(count=count)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -339,7 +334,7 @@ async def eu_users_with_three_teams(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Post a short alert in #ops-alerts with the count of NA users who made purchases after 2025-10-01. Include the count and the date cutoff in the message.",
+        "prompt": "Post a short alert in #ops-alerts with the count of NA users who made purchases after 2025-10-01.",
         "response_schema": None,
     },
     dataset="easy",
@@ -354,28 +349,22 @@ async def announce_na_users_with_october_purchases(ctx: EvalContext):
     buyer_ids = {purchase.user_id for purchase in purchases if purchase.user_id in na_ids}
 
     count = len(buyer_ids)
-    ctx.reference = {"expected_count": count, "cutoff": "2025-10-01"}
+    ctx.store(reference={"expected_count": count})
 
     messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#ops-alerts", limit=10)
     ).messages
     matching = next(
-        (
-            message
-            for message in messages
-            if str(count) in message.text and "2025-10-01" in message.text
-        ),
+        (message for message in messages if contains_number(message.text, count)),
         None,
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": matching is not None,
         "message_text": matching.text if matching else None,
-    }
+    })
 
-    assert (
-        matching is not None
-    ), "No #ops-alerts message found with the NA purchase count and cutoff date"
+    assert matching is not None, "No #ops-alerts message found with the NA purchase count"
 
 
 @eval(
@@ -407,7 +396,7 @@ async def apac_subscribers_zero_ranked_mid_nov(ctx: EvalContext):
         user_id for user_id in subscriber_ids if ranked_totals.get(user_id, 0) == 0
     ]
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -434,7 +423,7 @@ async def relay_latest_product_note_to_crm(ctx: EvalContext):
         raise ValueError("No messages found in #product-notes")
 
     latest_text = messages[0].text
-    ctx.reference = {"expected_text": latest_text}
+    ctx.store(reference={"expected_text": latest_text})
 
     crm_messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#crm-campaigns", limit=10)
@@ -443,10 +432,10 @@ async def relay_latest_product_note_to_crm(ctx: EvalContext):
         (message for message in crm_messages if latest_text in message.text), None
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": matching is not None,
         "message_text": matching.text if matching else None,
-    }
+    })
 
     assert (
         matching is not None
@@ -474,7 +463,7 @@ async def eu_whales_coins_pack_buyers(ctx: EvalContext):
     }
 
     ground_truth = UserCount(count=len(buyer_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -504,7 +493,7 @@ async def na_premium_active_subscribers_count(ctx: EvalContext):
     eligible_ids = {sub.user_id for sub in premium_active if sub.user_id in subscriber_ids}
 
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -542,7 +531,7 @@ async def latam_free_ranked_match_first_week_nov(ctx: EvalContext):
         user_id for user_id in free_ids if ranked_totals.get(user_id, 0) > 0
     ]
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -571,7 +560,7 @@ async def apac_single_subscription_users_count(ctx: EvalContext):
     count = sum(1 for user_id in apac_ids if sub_counts[user_id] == 1)
 
     ground_truth = UserCount(count=count)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -601,7 +590,7 @@ async def eu_subscribers_with_canceled_subs(ctx: EvalContext):
     canceled_ids = {sub.user_id for sub in canceled_subs if sub.user_id in subscriber_ids}
 
     ground_truth = UserCount(count=len(canceled_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -625,7 +614,7 @@ async def user_00020_team_total(ctx: EvalContext):
         ListTeamsInput(user_ids=["user_00020"])
     ).teams
     ground_truth = TeamTotal(team_count=len(teams))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -649,7 +638,7 @@ async def user_00005_purchase_total(ctx: EvalContext):
         ListPurchasesInput(user_ids=["user_00005"])
     ).purchases
     ground_truth = PurchaseCount(purchase_count=len(purchases))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -679,7 +668,7 @@ async def user_00005_sessions_on_2025_11_19(ctx: EvalContext):
     total_sessions = sum(row.sessions for row in rows)
 
     ground_truth = SessionsTotal(sessions=total_sessions)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -719,7 +708,7 @@ async def count_ultra_subs_by_region(ctx: EvalContext):
     }
 
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -759,7 +748,7 @@ async def create_churn_risk_flag(ctx: EvalContext):
     total_sessions = sum(eng.sessions for eng in window_rows)
     total_minutes = sum(eng.minutes_played for eng in window_rows)
 
-    ctx.reference = {
+    ctx.store(reference={
         "expected_user_id": target_user_id,
         "expected_flag_type": expected_flag_type,
         "engagement_context": {
@@ -768,7 +757,7 @@ async def create_churn_risk_flag(ctx: EvalContext):
             "window_start": window_start.isoformat(),
             "window_end": latest_date.isoformat(),
         },
-    }
+    })
 
     agent_flags = [
         flag
@@ -776,12 +765,12 @@ async def create_churn_risk_flag(ctx: EvalContext):
         if flag.user_id == target_user_id and flag.flag_type == expected_flag_type
     ]
 
-    ctx.output = {
+    ctx.store(output={
         "flag_created": bool(agent_flags),
         "user_id": agent_flags[0].user_id if agent_flags else None,
         "flag_type": agent_flags[0].flag_type if agent_flags else None,
         "reason": agent_flags[0].reason if agent_flags else None,
-    }
+    })
 
     assert len(agent_flags) > 0, f"No churn_risk flag created for {target_user_id}"
     flag = agent_flags[0]
@@ -825,14 +814,14 @@ async def na_whale_lowest_ranked_matches(ctx: EvalContext):
     for row in engagement_rows:
         ranked_totals[row.user_id] += row.ranked_matches
 
-    min_ranked = min(ranked_totals.values())
-    lowest_users = [
-        user for user in whales if ranked_totals.get(user.id, 0) == min_ranked
-    ]
+    # Include ALL whales (those without engagement data have 0 matches)
+    all_ranked = {user.id: ranked_totals.get(user.id, 0) for user in whales}
+    min_ranked = min(all_ranked.values())
+    lowest_users = [user for user in whales if all_ranked[user.id] == min_ranked]
     earliest_user = min(lowest_users, key=lambda user: user.signup_date)
 
     ground_truth = UserIdentity(user_id=earliest_user.id, full_name=earliest_user.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -875,7 +864,7 @@ async def apac_top_spender_after_sept(ctx: EvalContext):
     )
 
     ground_truth = SpendAmount(total_amount=spend_totals[top_user.id])
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -889,7 +878,7 @@ async def apac_top_spender_after_sept(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Between 2025-11-10 and 2025-11-19, which NA free user logged the most sessions? Provide the user id and total sessions.",
+        "prompt": "Between 2025-11-10 and 2025-11-19, which NA free user logged the most sessions? If multiple users tie, return the one who signed up first. Provide the user id and total sessions.",
         "response_schema": UserSessions,
     },
     dataset="medium",
@@ -925,7 +914,7 @@ async def na_free_top_sessions_window(ctx: EvalContext):
     ground_truth = UserSessions(
         user_id=top_user.id, total_sessions=session_totals[top_user.id]
     )
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -941,7 +930,7 @@ async def na_free_top_sessions_window(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Between 2025-11-01 and 2025-11-19, which LATAM whale logged the most total minutes? Provide the user id and total minutes.",
+        "prompt": "Between 2025-11-01 and 2025-11-19, which LATAM whale logged the most total minutes? If multiple users tie, return the one who signed up first. Provide the user id and total minutes.",
         "response_schema": UserMinutes,
     },
     dataset="medium",
@@ -978,7 +967,7 @@ async def latam_whale_top_minutes(ctx: EvalContext):
     ground_truth = UserMinutes(
         user_id=top_user.id, total_minutes=minute_totals[top_user.id]
     )
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1018,7 +1007,7 @@ async def apac_active_premium_coins_after_sept15_count(ctx: EvalContext):
     }
 
     ground_truth = UserCount(count=len(buyer_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1049,7 +1038,7 @@ async def eu_active_premium_with_purchase_count(ctx: EvalContext):
     purchasers = {purchase.user_id for purchase in purchases if purchase.user_id in eligible_ids}
 
     ground_truth = UserCount(count=len(purchasers))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1097,7 +1086,7 @@ async def latam_subscriber_top_ranked_mid_nov(ctx: EvalContext):
     top_user = min(leaders, key=lambda user: user.signup_date)
 
     ground_truth = UserIdentity(user_id=top_user.id, full_name=top_user.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1133,7 +1122,7 @@ async def apac_ultra_recent_team_count(ctx: EvalContext):
     user_ids_with_recent_team = {team.user_id for team in teams}
 
     ground_truth = UserCount(count=len(user_ids_with_recent_team))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1160,28 +1149,22 @@ async def post_eu_free_zero_team_crm_note(ctx: EvalContext):
     team_counts = Counter(team.user_id for team in teams)
     zero_team_count = sum(1 for user in eu_free if team_counts[user.id] == 0)
 
-    ctx.reference = {"expected_count": zero_team_count}
+    ctx.store(reference={"expected_count": zero_team_count})
 
     messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#crm-campaigns", limit=10)
     ).messages
     matching = next(
-        (
-            message
-            for message in messages
-            if str(zero_team_count) in message.text and "EU free" in message.text
-        ),
+        (message for message in messages if contains_number(message.text, zero_team_count)),
         None,
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": matching is not None,
         "message_text": matching.text if matching else None,
-    }
+    })
 
-    assert (
-        matching is not None
-    ), "No #crm-campaigns message found summarizing EU free users with zero teams"
+    assert matching is not None, "No #crm-campaigns message found with the expected count"
 
 
 @eval(
@@ -1215,11 +1198,11 @@ async def flag_apac_whale_top_spender(ctx: EvalContext):
     ]
     top_user = min(leaders, key=lambda user: user.signup_date)
 
-    ctx.reference = {
+    ctx.store(reference={
         "expected_user_id": top_user.id,
         "expected_flag_type": "vip_support",
         "total_amount": max_spend,
-    }
+    })
 
     created_flags = [
         flag
@@ -1227,10 +1210,10 @@ async def flag_apac_whale_top_spender(ctx: EvalContext):
         if flag.user_id == top_user.id and flag.flag_type == "vip_support"
     ]
 
-    ctx.output = {
+    ctx.store(output={
         "flag_created": bool(created_flags),
         "flag_reason": created_flags[0].reason if created_flags else None,
-    }
+    })
 
     assert created_flags, f"No vip_support flag created for {top_user.id}"
     assert (
@@ -1258,7 +1241,7 @@ async def update_na_subscriber_no_recent_purchase_notes(ctx: EvalContext):
     eligible_ids = [user_id for user_id in subscriber_ids if user_id not in recent_buyers]
 
     note_text = "NA subscriber - no purchases since Sept 2025"
-    ctx.reference = {"eligible_ids": sorted(eligible_ids), "note": note_text}
+    ctx.store(reference={"eligible_ids": sorted(eligible_ids), "note": note_text})
 
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=eligible_ids)
@@ -1267,7 +1250,7 @@ async def update_na_subscriber_no_recent_purchase_notes(ctx: EvalContext):
         user.id for user in updated_users if user.admin_note == note_text
     ]
 
-    ctx.output = {"updated_ids": sorted(updated_ids)}
+    ctx.store(output={"updated_ids": sorted(updated_ids)})
 
     assert len(updated_ids) == len(
         eligible_ids
@@ -1291,7 +1274,7 @@ async def most_recent_team_name_user_00024(ctx: EvalContext):
 
     latest_team = max(teams, key=lambda team: team.created_at)
     ground_truth = TeamName(team_name=latest_team.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1325,7 +1308,7 @@ async def earliest_latam_subscriber_purchase_count_after_june(ctx: EvalContext):
     ).purchases
 
     ground_truth = PurchaseCount(purchase_count=len(purchases))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1362,7 +1345,7 @@ async def top_sku_latam_subscribers(ctx: EvalContext):
     top_sku = top_skus[0]
 
     ground_truth = SkuName(sku=top_sku)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1375,7 +1358,7 @@ async def top_sku_latam_subscribers(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Among APAC whales, take the user with the most sessions between 2025-11-13 and 2025-11-19. What is their total ranked matches in that same window?",
+        "prompt": "Among APAC whales, take the user with the most sessions between 2025-11-13 and 2025-11-19. If multiple users tie, use the one who signed up first. What is their total ranked matches in that same window?",
         "response_schema": RankedMatchesTotal,
     },
     dataset="medium",
@@ -1412,7 +1395,7 @@ async def apac_whale_ranked_matches_for_top_sessions(ctx: EvalContext):
     top_user = min(leaders, key=lambda user: user.signup_date)
 
     ground_truth = RankedMatchesTotal(ranked_matches=ranked_totals[top_user.id])
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1461,7 +1444,7 @@ async def latam_ultra_zero_ranked(ctx: EvalContext):
         user_id for user_id in ultra_latam_ids if ranked_totals.get(user_id, 0) == 0
     ]
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1495,10 +1478,10 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
     }
 
     required_note = "APAC premium whale outreach 2025-11"
-    ctx.reference = {
+    ctx.store(reference={
         "eligible_user_ids": sorted(premium_whale_ids),
         "note": required_note,
-    }
+    })
 
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=list(premium_whale_ids))
@@ -1507,7 +1490,7 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
         user.id for user in updated_users if user.admin_note == required_note
     ]
 
-    ctx.output = {"updated_ids": sorted(updated_ids), "note": required_note}
+    ctx.store(output={"updated_ids": sorted(updated_ids), "note": required_note})
 
     assert len(updated_ids) == len(
         premium_whale_ids
@@ -1516,7 +1499,7 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Post a brief alert in #ops-alerts stating how many LATAM active ultra users recorded zero ranked matches between 2025-11-13 and 2025-11-19. Include the number and the date range in the message.",
+        "prompt": "Post a brief alert in #ops-alerts stating how many LATAM active ultra users recorded zero ranked matches between 2025-11-13 and 2025-11-19.",
         "response_schema": None,
     },
     dataset="hard",
@@ -1553,34 +1536,22 @@ async def post_latam_ultra_zero_ranked_alert(ctx: EvalContext):
     ]
     expected_count = len(eligible_ids)
 
-    ctx.reference = {
-        "expected_count": expected_count,
-        "window_start": window_start.isoformat(),
-        "window_end": window_end.isoformat(),
-    }
+    ctx.store(reference={"expected_count": expected_count})
 
     messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#ops-alerts", limit=5)
     ).messages
     alert_message = next(
-        (
-            message
-            for message in messages
-            if str(expected_count) in message.text
-            and window_start.isoformat() in message.text
-            and window_end.isoformat() in message.text
-        ),
+        (message for message in messages if contains_number(message.text, expected_count)),
         None,
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": alert_message is not None,
         "message_text": alert_message.text if alert_message else None,
-    }
+    })
 
-    assert (
-        alert_message is not None
-    ), "No alert message posted with the expected count and date range in #ops-alerts"
+    assert alert_message is not None, "No #ops-alerts message found with the expected count"
 
 
 @eval(
@@ -1611,7 +1582,7 @@ async def eu_ultra_whale_earliest_post_oct_team(ctx: EvalContext):
     owner = whale_lookup[earliest_team.user_id]
 
     ground_truth = UserIdentity(user_id=owner.id, full_name=owner.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1627,7 +1598,7 @@ async def eu_ultra_whale_earliest_post_oct_team(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Among LATAM subscribers with at least two teams, who has the highest total purchase amount? Provide the user id and total amount.",
+        "prompt": "Among LATAM subscribers with at least two teams, who has the highest total purchase amount? If multiple users tie, return the one who signed up first. Provide the user id and total amount.",
         "response_schema": UserAmount,
     },
     dataset="hard",
@@ -1663,7 +1634,7 @@ async def latam_subscriber_highest_spend_two_teams(ctx: EvalContext):
     top_user = min(leaders, key=lambda user: user.signup_date)
 
     ground_truth = UserAmount(user_id=top_user.id, total_amount=spend_totals[top_user.id])
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1708,20 +1679,20 @@ async def flag_top_latam_subscribers_ranked(ctx: EvalContext):
         key=lambda user: (-ranked_totals.get(user.id, 0), user.signup_date),
     )
     top_three = sorted_users[:3]
-    ctx.reference = {
+    ctx.store(reference={
         "expected_user_ids": [user.id for user in top_three],
         "flag_type": "ranked_surge",
         "ranked_totals": {user.id: ranked_totals.get(user.id, 0) for user in top_three},
-    }
+    })
 
     created_flags = [
         flag for flag in ctx.agent.world.flags.values() if flag.flag_type == "ranked_surge"
     ]
     created_map = {flag.user_id: flag for flag in created_flags}
 
-    ctx.output = {
+    ctx.store(output={
         "created_user_ids": sorted(created_map.keys()),
-    }
+    })
 
     assert len(created_flags) >= 3, "Expected ranked_surge flags for top three users"
     for user in top_three:
@@ -1749,14 +1720,14 @@ async def update_ultra_whale_notes(ctx: EvalContext):
     eligible_ids = {sub.user_id for sub in ultra_active if sub.user_id in whale_ids}
 
     note_text = "Ultra whale retention outreach 2025-11"
-    ctx.reference = {"eligible_ids": sorted(eligible_ids), "note": note_text}
+    ctx.store(reference={"eligible_ids": sorted(eligible_ids), "note": note_text})
 
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=list(eligible_ids))
     ).users
     updated_ids = [user.id for user in updated_users if user.admin_note == note_text]
 
-    ctx.output = {"updated_ids": sorted(updated_ids)}
+    ctx.store(output={"updated_ids": sorted(updated_ids)})
 
     assert len(updated_ids) == len(
         eligible_ids
@@ -1803,7 +1774,7 @@ async def apac_whale_zero_ranked_with_purchase(ctx: EvalContext):
 
     earliest_user = min(eligible_users, key=lambda user: user.signup_date)
     ground_truth = UserIdentity(user_id=earliest_user.id, full_name=earliest_user.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1862,7 +1833,7 @@ async def eu_premium_highest_average_minutes(ctx: EvalContext):
     top_user = min(leaders, key=lambda user: user.signup_date)
 
     ground_truth = UserIdentity(user_id=top_user.id, full_name=top_user.name)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1878,7 +1849,7 @@ async def eu_premium_highest_average_minutes(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Among LATAM subscribers with exactly one team, who has the highest total purchase amount? Provide the user id and total amount.",
+        "prompt": "Among LATAM subscribers with exactly one team, who has the highest total purchase amount? If multiple users tie, return the one who signed up first. Provide the user id and total amount.",
         "response_schema": UserAmount,
     },
     dataset="hard",
@@ -1916,7 +1887,7 @@ async def latam_single_team_top_spender(ctx: EvalContext):
     ground_truth = UserAmount(
         user_id=top_user.id, total_amount=spend_totals[top_user.id]
     )
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -1933,7 +1904,7 @@ async def latam_single_team_top_spender(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Post a message in #product-notes listing how many teams EU whales created after 2025-10-15. Include the number and the date cutover in the text.",
+        "prompt": "Post a message in #product-notes listing how many teams EU whales created after 2025-10-15.",
         "response_schema": None,
     },
     dataset="hard",
@@ -1949,28 +1920,22 @@ async def post_eu_whale_team_creation_summary(ctx: EvalContext):
     ).teams
     count = len([team for team in teams if team.user_id in whale_ids])
 
-    ctx.reference = {"expected_count": count, "cutover": "2025-10-15"}
+    ctx.store(reference={"expected_count": count})
 
     messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#product-notes", limit=10)
     ).messages
     matching = next(
-        (
-            message
-            for message in messages
-            if str(count) in message.text and "2025-10-15" in message.text
-        ),
+        (message for message in messages if contains_number(message.text, count)),
         None,
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": matching is not None,
         "message_text": matching.text if matching else None,
-    }
+    })
 
-    assert (
-        matching is not None
-    ), "No #product-notes message found summarizing EU whale team creations"
+    assert matching is not None, "No #product-notes message found with the expected count"
 
 
 @eval(
@@ -1992,7 +1957,7 @@ async def purchase_count_top_buyer_after_oct(ctx: EvalContext):
     max_count = max(purchase_counts.values())
 
     ground_truth = PurchaseCount(purchase_count=max_count)
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -2005,7 +1970,7 @@ async def purchase_count_top_buyer_after_oct(ctx: EvalContext):
 
 @eval(
     input={
-        "prompt": "Post an alert in #ops-alerts noting how many APAC whales recorded zero ranked matches between 2025-11-17 and 2025-11-19. Include the count and the date range.",
+        "prompt": "Post an alert in #ops-alerts noting how many APAC whales recorded zero ranked matches between 2025-11-17 and 2025-11-19.",
         "response_schema": None,
     },
     dataset="hard",
@@ -2029,39 +1994,27 @@ async def post_apac_whale_zero_ranked_recent_alert(ctx: EvalContext):
     zero_ranked_ids = [user_id for user_id in whale_ids if ranked_totals.get(user_id, 0) == 0]
     count = len(zero_ranked_ids)
 
-    ctx.reference = {
-        "expected_count": count,
-        "start": "2025-11-17",
-        "end": "2025-11-19",
-    }
+    ctx.store(reference={"expected_count": count})
 
     messages = ctx.agent.world.list_messages(
         ListMessagesInput(channel="#ops-alerts", limit=10)
     ).messages
     matching = next(
-        (
-            message
-            for message in messages
-            if str(count) in message.text
-            and "2025-11-17" in message.text
-            and "2025-11-19" in message.text
-        ),
+        (message for message in messages if contains_number(message.text, count)),
         None,
     )
 
-    ctx.output = {
+    ctx.store(output={
         "message_found": matching is not None,
         "message_text": matching.text if matching else None,
-    }
+    })
 
-    assert (
-        matching is not None
-    ), "No #ops-alerts message found for APAC whales with zero ranked matches in the window"
+    assert matching is not None, "No #ops-alerts message found with the expected count"
 
 
 @eval(
     input={
-        "prompt": "Across all engagement data, which NA whale accumulated the most total minutes played? Provide the user id and total minutes.",
+        "prompt": "Across all engagement data, which NA whale accumulated the most total minutes played? If multiple users tie, return the one who signed up first. Provide the user id and total minutes.",
         "response_schema": UserMinutes,
     },
     dataset="hard",
@@ -2094,7 +2047,7 @@ async def na_whale_highest_total_minutes(ctx: EvalContext):
     ground_truth = UserMinutes(
         user_id=top_user.id, total_minutes=minute_totals[top_user.id]
     )
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1
@@ -2135,7 +2088,7 @@ async def apac_active_subscribers_three_pre_oct_teams(ctx: EvalContext):
     eligible_ids = [user_id for user_id in active_ids if pre_oct_counts.get(user_id, 0) == 3]
 
     ground_truth = UserCount(count=len(eligible_ids))
-    ctx.reference = ground_truth.model_dump_json()
+    ctx.store(reference=ground_truth.model_dump_json())
 
     assert (
         ctx.agent.output.tool_calls and len(ctx.agent.output.tool_calls) >= 1

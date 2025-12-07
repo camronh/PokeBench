@@ -1,3 +1,8 @@
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from pydantic import BaseModel
 from world_runtime import World
 from langchain_core.tools import StructuredTool
@@ -13,10 +18,7 @@ from langgraph.graph import StateGraph, START, END
 from typing_extensions import TypedDict, Annotated
 from typing import Literal
 import operator
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
 
 
 # Define state for the agent
@@ -35,12 +37,6 @@ def get_response_tool(response_schema: BaseModel) -> StructuredTool:
         args_schema=response_schema,
     )
 
-# Initialize the model
-model = ChatOpenAI(
-    model="gpt-5-mini",
-    reasoning_effort="low",
-)
-
 def create_poke_agent(tools: list[StructuredTool]):
     """
     Create a LangGraph agent that uses the provided tools.
@@ -52,6 +48,12 @@ def create_poke_agent(tools: list[StructuredTool]):
         Compiled LangGraph agent
     """
 
+
+    # Initialize model inside function
+    model = ChatOpenAI(
+        model="gpt-5-mini",
+        reasoning_effort="minimal",
+    )
 
     # Create tool lookup
     tools_by_name = {tool.name: tool for tool in tools}
@@ -152,8 +154,11 @@ class Agent:
 
     async def run(self, prompt: str):
         runner = create_poke_agent(tools=self.tools)
+        import uuid
+        self.trace_id = uuid.uuid4()
         self.final_agent_state = await runner.ainvoke(
-            {"messages": [HumanMessage(content=prompt)]}
+            {"messages": [HumanMessage(content=prompt)]},
+            {"run_id": self.trace_id}
         )
         self.output: AIMessage = self.final_agent_state["messages"][-1]
         return self.output.content

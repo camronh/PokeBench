@@ -42,6 +42,8 @@ htmlcov/
 
 .env
 
-.twevals
+.ezvals
 data/world_seed.json
 data/pokemon_raw.json
+
+ezvals.json
