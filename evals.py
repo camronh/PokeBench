@@ -25,6 +25,15 @@ def contains_number(text: str, number: int) -> bool:
     return bool(re.search(pattern, text))
 
 
+# Toggle programmatic tool calling mode
+# Set to True to use code execution for tool calling (reduces latency for multi-tool workflows)
+PROGRAMMATIC_TOOLS = True
+
+# Toggle output schema in tool descriptions
+# Set to True to include JSON schema of tool outputs in descriptions (helps Claude process results)
+INCLUDE_OUTPUT_SCHEMA = True
+
+
 # Target function
 async def target(ctx: EvalContext):
     # Create a copy of the world data before each eval run
@@ -33,14 +42,21 @@ async def target(ctx: EvalContext):
     # Run agent
     if ctx.input["response_schema"]:
         ctx.agent = await Agent.create_and_run(
-            ctx.input["prompt"], ctx.input["response_schema"]
+            ctx.input["prompt"],
+            ctx.input["response_schema"],
+            programmatic_tools=PROGRAMMATIC_TOOLS,
+            include_output_schema=INCLUDE_OUTPUT_SCHEMA
         )
         if ctx.agent.output.tool_calls:
             output = ctx.agent.output.tool_calls[0]["args"]
         else:
             output = ctx.agent.output.content
     else:
-        ctx.agent = await Agent.create_and_run(ctx.input["prompt"])
+        ctx.agent = await Agent.create_and_run(
+            ctx.input["prompt"],
+            programmatic_tools=PROGRAMMATIC_TOOLS,
+            include_output_schema=INCLUDE_OUTPUT_SCHEMA
+        )
         output = ctx.agent.output.content
 
     trace_url = f"https://smith.langchain.com/o/d967989d-4221-53db-b0a5-665b504acba2/projects/p/0da7cda2-d355-4819-b61d-d67d595e4f29/r/{ctx.agent.trace_id}"

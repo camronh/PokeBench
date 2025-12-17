@@ -366,21 +366,39 @@ class World(BaseModel):
             )
         return tools
 
-    def to_anthropic_tools(self) -> List[Dict[str, Any]]:
+    def to_anthropic_tools(
+        self,
+        allowed_callers: List[str] = None,
+        include_output_schema: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Build Anthropic tools definition from the Pydantic input models.
         The caller still needs to route tool calls into the funcs.
+
+        Args:
+            allowed_callers: Optional list of callers that can invoke the tool.
+                             e.g. ["code_execution_20250825"] for programmatic tool calling.
+            include_output_schema: If True, append the output JSON schema to the description.
         """
+        import json
         tools = []
         for name, meta in self.tool_map().items():
             input_model = meta["input_model"]
-            tools.append(
-                {
-                    "name": name,
-                    "description": meta["description"],
-                    "input_schema": input_model.model_json_schema(),
-                }
-            )
+            output_model = meta["output_model"]
+
+            description = meta["description"]
+            if include_output_schema:
+                output_schema = json.dumps(output_model.model_json_schema(), indent=2)
+                description += f"\n\nOutput schema:\n{output_schema}"
+
+            tool_def = {
+                "name": name,
+                "description": description,
+                "input_schema": input_model.model_json_schema(),
+            }
+            if allowed_callers:
+                tool_def["allowed_callers"] = allowed_callers
+            tools.append(tool_def)
         return tools
 
     def to_langchain_tools(self):

@@ -7,11 +7,14 @@ import uuid
 from pydantic import BaseModel
 from world_runtime import World
 import anthropic
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 from langsmith.wrappers import wrap_anthropic
 
 
 RESPONSE_TOOL_NAME = "respond_to_admin_user"
+CODE_EXECUTION_TOOL_TYPE = "code_execution_20250825"
+PROGRAMMATIC_BETA = "advanced-tool-use-2025-11-20"
+ENABLE_TRUNCATION = False
 
 
 class AgentOutput:
@@ -30,24 +33,31 @@ class AgentOutput:
         return self._tool_calls
 
 
-def get_response_tool_anthropic(response_schema: BaseModel) -> dict:
+def get_response_tool_anthropic(response_schema: BaseModel, allowed_callers: List[str] = None) -> dict:
     """Create Anthropic tool definition for the response tool."""
-    return {
+    tool_def = {
         "name": RESPONSE_TOOL_NAME,
         "description": "Use this tool when you're ready to respond to the Admin user's request. The admin will ONLY be able to see your response if you use this tool.",
         "input_schema": response_schema.model_json_schema(),
     }
+    if allowed_callers:
+        tool_def["allowed_callers"] = allowed_callers
+    return tool_def
 
 
 class Agent:
-    def __init__(self, response_schema: BaseModel = None):
+    def __init__(
+        self,
+        response_schema: BaseModel = None,
+        programmatic_tools: bool = False,
+        include_output_schema: bool = False
+    ):
         self.response_schema = response_schema
+        self.programmatic_tools = programmatic_tools
+        self.include_output_schema = include_output_schema
 
         # Copy World to a new World
         self.world = World()
-
-        # Build Anthropic tools from World
-        self.tools = self.world.to_anthropic_tools()
 
         # Build tool executor map
         self.tool_executors: Dict[str, Callable] = {}
@@ -65,9 +75,28 @@ class Agent:
 
             self.tool_executors[name] = make_executor(func, input_model)
 
-        # Add response tool if schema provided
-        if response_schema:
-            self.tools.append(get_response_tool_anthropic(response_schema))
+        # Build Anthropic tools from World
+        if programmatic_tools:
+            # Programmatic mode: tools can only be called from code execution
+            self.tools = [
+                {"type": CODE_EXECUTION_TOOL_TYPE, "name": "code_execution"},
+                *self.world.to_anthropic_tools(
+                    allowed_callers=[CODE_EXECUTION_TOOL_TYPE],
+                    include_output_schema=include_output_schema
+                )
+            ]
+            if response_schema:
+                self.tools.append(get_response_tool_anthropic(
+                    response_schema,
+                    allowed_callers=[CODE_EXECUTION_TOOL_TYPE]
+                ))
+        else:
+            # Regular mode: direct tool calling
+            self.tools = self.world.to_anthropic_tools(
+                include_output_schema=include_output_schema
+            )
+            if response_schema:
+                self.tools.append(get_response_tool_anthropic(response_schema))
 
         # Initialize client
         self.client = wrap_anthropic(anthropic.AsyncAnthropic())
@@ -76,6 +105,7 @@ class Agent:
         self.trace_id = None
         self.final_agent_state = None
         self.output = None
+        self.container_id = None  # For programmatic tool calling
 
     async def run(self, prompt: str):
         self.trace_id = uuid.uuid4()
@@ -91,13 +121,34 @@ class Agent:
         final_response = None
 
         while True:
-            response = await self.client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=20000,
-                system=system_prompt,
-                tools=self.tools,
-                messages=messages,
-            )
+            # Make API call based on mode
+            if self.programmatic_tools:
+                # Programmatic mode: use beta API with code execution
+                request_kwargs = {
+                    "model": "claude-sonnet-4-5-20250929",
+                    "betas": [PROGRAMMATIC_BETA],
+                    "max_tokens": 20000,
+                    "system": system_prompt,
+                    "tools": self.tools,
+                    "messages": messages,
+                }
+                if self.container_id:
+                    request_kwargs["container"] = self.container_id
+
+                response = await self.client.beta.messages.create(**request_kwargs)
+
+                # Track container for reuse
+                if hasattr(response, 'container') and response.container:
+                    self.container_id = response.container.id
+            else:
+                # Regular mode
+                response = await self.client.messages.create(
+                    model="claude-sonnet-4-5-20250929",
+                    max_tokens=20000,
+                    system=system_prompt,
+                    tools=self.tools,
+                    messages=messages,
+                )
 
             final_response = response
 
@@ -110,10 +161,20 @@ class Agent:
                 should_exit = False
 
                 for content_block in response.content:
-                    if content_block.type == "tool_use":
+                    if content_block.type == "server_tool_use":
+                        # Code execution started - just continue processing
+                        pass
+                    elif content_block.type == "tool_use":
                         tool_name = content_block.name
                         tool_input = content_block.input
                         tool_id = content_block.id
+
+                        # Check if this is a programmatic call
+                        is_programmatic = (
+                            hasattr(content_block, 'caller') and
+                            hasattr(content_block.caller, 'type') and
+                            content_block.caller.type == CODE_EXECUTION_TOOL_TYPE
+                        )
 
                         # Check if response tool
                         if tool_name == RESPONSE_TOOL_NAME:
@@ -124,7 +185,7 @@ class Agent:
                         try:
                             result = self.tool_executors[tool_name](**tool_input)
                             result_str = str(result)
-                            if len(result_str) > 5000:
+                            if len(result_str) > 5000 and ENABLE_TRUNCATION:
                                 result_str = (
                                     f"{result_str[:5000]}... *Truncated to manage token limits*"
                                 )
@@ -138,6 +199,9 @@ class Agent:
                                 "content": result_str,
                             }
                         )
+                    elif content_block.type == "code_execution_tool_result":
+                        # Code execution completed - continue processing
+                        pass
 
                 if should_exit:
                     break
@@ -174,7 +238,16 @@ class Agent:
         return self.output.content
 
     @staticmethod
-    async def create_and_run(prompt: str, response_schema: BaseModel = None):
-        agent = Agent(response_schema=response_schema)
+    async def create_and_run(
+        prompt: str,
+        response_schema: BaseModel = None,
+        programmatic_tools: bool = False,
+        include_output_schema: bool = True
+    ):
+        agent = Agent(
+            response_schema=response_schema,
+            programmatic_tools=programmatic_tools,
+            include_output_schema=include_output_schema
+        )
         await agent.run(prompt)
         return agent
