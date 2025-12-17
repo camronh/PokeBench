@@ -1,0 +1,468 @@
+[
+  {
+    "id": "earliest_na_three_team_user",
+    "prompt": "Among NA users who have exactly three teams, who signed up first? Provide the full name.",
+    "schema_name": "Name",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "full_name": "Matthew Cross"
+    }
+  },
+  {
+    "id": "earliest_latam_active_plan",
+    "prompt": "For LATAM users with an active subscription, what plan belongs to the earliest signup?",
+    "schema_name": "SubscriptionPlan",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "plan": "ultra"
+    }
+  },
+  {
+    "id": "eu_subscribers_with_recent_team",
+    "prompt": "How many EU subscribers have created at least one team after 2025-07-01?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 69
+    }
+  },
+  {
+    "id": "na_free_without_teams",
+    "prompt": "How many NA free users currently have zero teams?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 36
+    }
+  },
+  {
+    "id": "apac_whales_with_active_subs",
+    "prompt": "How many APAC whales have an active subscription right now?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 26
+    }
+  },
+  {
+    "id": "latam_subscribers_with_post_sept_team",
+    "prompt": "How many LATAM subscribers have created at least one team after 2025-09-01?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 77
+    }
+  },
+  {
+    "id": "eu_users_with_three_teams",
+    "prompt": "How many EU users have exactly three teams?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 59
+    }
+  },
+  {
+    "id": "apac_subscribers_zero_ranked_mid_nov",
+    "prompt": "How many APAC subscribers recorded zero ranked matches between 2025-11-13 and 2025-11-19?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 34
+    }
+  },
+  {
+    "id": "eu_whales_coins_pack_buyers",
+    "prompt": "How many EU whales have purchased a coins_pack at least once?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 32
+    }
+  },
+  {
+    "id": "na_premium_active_subscribers_count",
+    "prompt": "How many NA subscribers have an active premium subscription?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 32
+    }
+  },
+  {
+    "id": "latam_free_ranked_match_first_week_nov",
+    "prompt": "During 2025-11-01 through 2025-11-07, how many LATAM free users played at least one ranked match?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 182
+    }
+  },
+  {
+    "id": "apac_single_subscription_users_count",
+    "prompt": "How many APAC users have exactly one subscription record on file?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 349
+    }
+  },
+  {
+    "id": "eu_subscribers_with_canceled_subs",
+    "prompt": "How many EU subscribers have a canceled subscription on record?",
+    "schema_name": "UserCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 18
+    }
+  },
+  {
+    "id": "user_00020_team_total",
+    "prompt": "How many teams does user_00020 have?",
+    "schema_name": "TeamTotal",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "team_count": 3
+    }
+  },
+  {
+    "id": "user_00005_purchase_total",
+    "prompt": "How many purchases has user_00005 made in total?",
+    "schema_name": "PurchaseCount",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "purchase_count": 2
+    }
+  },
+  {
+    "id": "user_00005_sessions_on_2025_11_19",
+    "prompt": "How many sessions did user_00005 log on 2025-11-19?",
+    "schema_name": "SessionsTotal",
+    "dataset": "easy",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "sessions": 1
+    }
+  },
+  {
+    "id": "count_ultra_subs_by_region",
+    "prompt": "How many LATAM users have an active ultra subscription and at least two teams?",
+    "schema_name": "UserCount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 42
+    }
+  },
+  {
+    "id": "na_whale_lowest_ranked_matches",
+    "prompt": "Between 2025-11-10 and 2025-11-19 inclusive, which NA whale recorded the fewest ranked matches? If multiple users tie, return the one who signed up first. Provide the user id and full name.",
+    "schema_name": "UserIdentity",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_01055",
+      "full_name": "Diane Griffin"
+    }
+  },
+  {
+    "id": "apac_top_spender_after_sept",
+    "prompt": "What is the total amount spent after 2025-09-01 by the APAC user who spent the most in that period? Provide just the numeric total.",
+    "schema_name": "SpendAmount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "total_amount": 102.67
+    }
+  },
+  {
+    "id": "na_free_top_sessions_window",
+    "prompt": "Between 2025-11-10 and 2025-11-19, which NA free user logged the most sessions? If multiple users tie, return the one who signed up first. Provide the user id and total sessions.",
+    "schema_name": "UserSessions",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_00993",
+      "total_sessions": 29
+    }
+  },
+  {
+    "id": "latam_whale_top_minutes",
+    "prompt": "Between 2025-11-01 and 2025-11-19, which LATAM whale logged the most total minutes? If multiple users tie, return the one who signed up first. Provide the user id and total minutes.",
+    "schema_name": "UserMinutes",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_00005",
+      "total_minutes": 1396
+    }
+  },
+  {
+    "id": "apac_active_premium_coins_after_sept15_count",
+    "prompt": "How many APAC users with an active premium subscription have bought a coins_pack after 2025-09-15?",
+    "schema_name": "UserCount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 13
+    }
+  },
+  {
+    "id": "eu_active_premium_with_purchase_count",
+    "prompt": "How many EU users have an active premium subscription and at least one purchase?",
+    "schema_name": "UserCount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 129
+    }
+  },
+  {
+    "id": "latam_subscriber_top_ranked_mid_nov",
+    "prompt": "Between 2025-11-13 and 2025-11-19, which LATAM subscriber played the most ranked matches? Provide the user id and full name.",
+    "schema_name": "UserIdentity",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_00251",
+      "full_name": "Kevin Arnold"
+    }
+  },
+  {
+    "id": "apac_ultra_recent_team_count",
+    "prompt": "How many APAC users with an active ultra subscription created at least one team after 2025-10-01?",
+    "schema_name": "UserCount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 20
+    }
+  },
+  {
+    "id": "most_recent_team_name_user_00024",
+    "prompt": "What is the name of the most recently created team for user_00024?",
+    "schema_name": "TeamName",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "team_name": "Justin's Team 2"
+    }
+  },
+  {
+    "id": "earliest_latam_subscriber_purchase_count_after_june",
+    "prompt": "For the earliest LATAM subscriber by signup date, how many purchases were made after 2025-06-01?",
+    "schema_name": "PurchaseCount",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "purchase_count": 1
+    }
+  },
+  {
+    "id": "top_sku_latam_subscribers",
+    "prompt": "Which SKU has the highest number of purchases among LATAM subscribers? Provide only the SKU.",
+    "schema_name": "SkuName",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "sku": "coins_pack"
+    }
+  },
+  {
+    "id": "apac_whale_ranked_matches_for_top_sessions",
+    "prompt": "Among APAC whales, take the user with the most sessions between 2025-11-13 and 2025-11-19. If multiple users tie, use the one who signed up first. What is their total ranked matches in that same window?",
+    "schema_name": "RankedMatchesTotal",
+    "dataset": "medium",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "ranked_matches": 11
+    }
+  },
+  {
+    "id": "latam_ultra_zero_ranked",
+    "prompt": "How many LATAM users with an active ultra subscription recorded zero ranked matches between 2025-11-13 and 2025-11-19?",
+    "schema_name": "UserCount",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 18
+    }
+  },
+  {
+    "id": "eu_ultra_whale_earliest_post_oct_team",
+    "prompt": "Which EU whale with an active ultra subscription created the earliest team after 2025-10-01? Provide the user id and full name.",
+    "schema_name": "UserIdentity",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_01531",
+      "full_name": "Julia Keller"
+    }
+  },
+  {
+    "id": "latam_subscriber_highest_spend_two_teams",
+    "prompt": "Among LATAM subscribers with at least two teams, who has the highest total purchase amount? If multiple users tie, return the one who signed up first. Provide the user id and total amount.",
+    "schema_name": "UserAmount",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_00771",
+      "total_amount": 189.69
+    }
+  },
+  {
+    "id": "apac_whale_zero_ranked_with_purchase",
+    "prompt": "Among APAC whales with at least one purchase after 2025-10-01 and zero ranked matches between 2025-11-15 and 2025-11-19, who signed up first? Provide the user id and full name.",
+    "schema_name": "UserIdentity",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_01840",
+      "full_name": "Erica Parker"
+    }
+  },
+  {
+    "id": "eu_premium_highest_average_minutes",
+    "prompt": "Which EU user with an active premium subscription had the highest average minutes per session between 2025-11-10 and 2025-11-19? Provide the user id and full name.",
+    "schema_name": "UserIdentity",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_01280",
+      "full_name": "Maria Diaz"
+    }
+  },
+  {
+    "id": "latam_single_team_top_spender",
+    "prompt": "Among LATAM subscribers with exactly one team, who has the highest total purchase amount? If multiple users tie, return the one who signed up first. Provide the user id and total amount.",
+    "schema_name": "UserAmount",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_01615",
+      "total_amount": 176.27
+    }
+  },
+  {
+    "id": "purchase_count_top_buyer_after_oct",
+    "prompt": "How many purchases did the top buyer make after 2025-10-01?",
+    "schema_name": "PurchaseCount",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "purchase_count": 3
+    }
+  },
+  {
+    "id": "na_whale_highest_total_minutes",
+    "prompt": "Across all engagement data, which NA whale accumulated the most total minutes played? If multiple users tie, return the one who signed up first. Provide the user id and total minutes.",
+    "schema_name": "UserMinutes",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "user_id": "user_00583",
+      "total_minutes": 3906
+    }
+  },
+  {
+    "id": "apac_active_subscribers_three_pre_oct_teams",
+    "prompt": "How many APAC subscribers have an active subscription and exactly three teams created before 2025-10-01?",
+    "schema_name": "UserCount",
+    "dataset": "hard",
+    "labels": [
+      "testing"
+    ],
+    "reference": {
+      "count": 8
+    }
+  }
+]
