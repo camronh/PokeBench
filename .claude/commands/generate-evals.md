@@ -68,7 +68,7 @@ async def eval_name(ctx: EvalContext):
 
 **Use `raise ValueError()` for environment/setup issues (errors):**
 
-Error will be caught automatically by twevals and will be considered an error so no need to raise an exception.
+Error will be caught automatically by ezvals and will be considered an error so no need to raise an exception.
 
 - Data not found in seed (e.g., "User not found")
 - No eligible data for ground truth calculation
@@ -79,7 +79,7 @@ Error will be caught automatically by twevals and will be considered an error so
 1. **Testing in-distribution knowledge**: Don't test Pokemon types/names knowledge or anything that may be guessable from training data
 2. **Too many assertions**: Only validate what's in the prompt. For it to be a fair test, the validations need be specified in the prompt.
 3. **Non-validation errors**: Use `raise ValueError()` for setup issues, not `assert`
-4. **Set Context Too Late**: Twevals includes the context data at time of exit. Try to set the context as early as possible. For example, try to set the ctx.output and/or ctx.reference before going into assertions.
+4. **Set Context Too Late**: EZVals includes the context data at time of exit. Try to set the context as early as possible. For example, try to set the ctx.output and/or ctx.reference before going into assertions.
 5. **Prescribing how to do the task**: Don't prescribe how to do the task. The query should be queries that a real admin user would ask. A real user would never tell the agent what tools to use or anything like that. 
 6. **Using Private Methods in Ground Truth Calculation**: The ground truth needs to be calculable using only the public tool methods in `world_runtime.py`. If we expect the agent to be able to get the correct answer, they need to be able to get to that answer only using the public tool methods available to it. Python primitives and all of that is fine but no manipulating or reading from the World object directly.
 
@@ -93,5 +93,5 @@ Mutation evals are evals that test that the agent can mutate the world state cor
 1. Consider the data that is available and generate questions or tasks that can be answered from the available data.
 2. Write test scripts to test that this data is reachable using the only the public tool methods in `world_runtime.py` and run them to validate that the data is reachable. For mutation evals, validate that the mutation is possible and works as expected.
 3. Write the evals in the `evals.py` file. Try to style them like the existing evals. Order them by difficulty. Apple `label="testing"` in the @eval decorator to help identify the eval later.
-4. Run the specific evals with `uv run twevals run evals.py --json --label testing -c 4` to validate that the eval is working as expected. Pass/fail is not important, but that the expected output type, reference, input, and score is correct.
+4. Run the specific evals with `uv run ezvals run evals.py --json --label testing -c 4` to validate that the eval is working as expected. Pass/fail is not important, but that the expected output type, reference, input, and score is correct.
 5. When everything looks good you can remove the testing label. No need to run the full suite. 

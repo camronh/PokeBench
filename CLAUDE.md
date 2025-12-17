@@ -8,13 +8,13 @@ We use the ezvals library to run evals. I made and maintain the ezvals library a
 
 Ezvals run commands:
 ```bash
-uv run ezvals run evals.py -c 5  # Run all evals
+uv run ezvals run evals.py  # Run all evals
 
-uv run ezvals run evals.py --dataset easy -c 5  # Run easy evals only
+uv run ezvals run evals.py --dataset easy   # Run easy evals only
 
 uv run ezvals run evals.py::get_user_by_id  # Run specific eval by function name
 
-uv run ezvals run evals.py -c 5 --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
+uv run ezvals run evals.py --timeout 30  # Run all evals with a 30 second timeout. Timed out evals are considered errors.
 
 uv run ezvals run evals.py --limit 5  # Run only the first 5 evals
 

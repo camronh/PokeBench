@@ -32,7 +32,7 @@ RESPONSE_TOOL_NAME = "respond_to_admin_user"
 def get_response_tool(response_schema: BaseModel) -> StructuredTool:
     return StructuredTool(
         name=RESPONSE_TOOL_NAME,
-        description="Respond to the Admin user's request. The admin will ONLY be able to see your response if you use this tool.",
+        description="Use this tool when you're ready to respond to the Admin user's request. The admin will ONLY be able to see your response if you use this tool.",
         func=lambda x: x,
         args_schema=response_schema,
     )
@@ -51,7 +51,7 @@ def create_poke_agent(tools: list[StructuredTool]):
 
     # Initialize model inside function
     model = ChatOpenAI(
-        model="gpt-5-mini",
+        model="gpt-5-nano",
         reasoning_effort="minimal",
     )
 
@@ -63,9 +63,10 @@ def create_poke_agent(tools: list[StructuredTool]):
 
     # Bind tools to the model
     model_with_tools = model.bind_tools(tools)
-
     # Build system prompt
-    system_prompt = "You are a helpful assistant with access to various tools."
+    system_prompt = """You are a helpful assistant with access to various admin tools. Your job is to use those tools to answer \
+        the user's questions or accomplish tasks. The requests will only be solvable by using the tools. Do not attempt to answer \
+            using your own knowledge or information. Only use the tools to answer the user's questions or accomplish tasks."""
     if has_response_tool:
         system_prompt += (
             f" You MUST respond to the user ONLY using the {RESPONSE_TOOL_NAME} tool."
