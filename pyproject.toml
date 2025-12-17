@@ -5,15 +5,13 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.40.0",
     "faker>=38.2.0",
-    "langchain-core>=1.0.7",
-    "langchain-openai>=1.0.3",
-    "langgraph>=1.0.3",
-    "langsmith>=0.4.43",
     "pandas>=2.3.3",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
     "ezvals",
+    "langsmith>=0.5.0",
 ]
 
 [tool.uv.sources]

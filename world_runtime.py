@@ -4,7 +4,12 @@ from datetime import datetime, date
 from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationError
-from langchain_core.tools import StructuredTool
+
+try:
+    from langchain_core.tools import StructuredTool
+    HAS_LANGCHAIN = True
+except ImportError:
+    HAS_LANGCHAIN = False
 
 from models import (
     User,
@@ -361,11 +366,32 @@ class World(BaseModel):
             )
         return tools
 
-    def to_langchain_tools(self) -> List[StructuredTool]:
+    def to_anthropic_tools(self) -> List[Dict[str, Any]]:
+        """
+        Build Anthropic tools definition from the Pydantic input models.
+        The caller still needs to route tool calls into the funcs.
+        """
+        tools = []
+        for name, meta in self.tool_map().items():
+            input_model = meta["input_model"]
+            tools.append(
+                {
+                    "name": name,
+                    "description": meta["description"],
+                    "input_schema": input_model.model_json_schema(),
+                }
+            )
+        return tools
+
+    def to_langchain_tools(self):
         """
         Build LangChain StructuredTool instances from the tool map.
         Each tool wraps the corresponding method and uses Pydantic models for validation.
+        Requires langchain_core to be installed.
         """
+        if not HAS_LANGCHAIN:
+            raise ImportError("langchain_core is required for to_langchain_tools()")
+
         tools = []
         for name, meta in self.tool_map().items():
             input_model = meta["input_model"]
