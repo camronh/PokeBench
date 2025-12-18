@@ -14,8 +14,6 @@ from langsmith.wrappers import wrap_anthropic
 RESPONSE_TOOL_NAME = "respond_to_admin_user"
 CODE_EXECUTION_TOOL_TYPE = "code_execution_20250825"
 PROGRAMMATIC_BETA = "advanced-tool-use-2025-11-20"
-ENABLE_TRUNCATION = False
-
 
 class AgentOutput:
     """Wrapper to match the expected output interface from evals.py"""
@@ -33,7 +31,11 @@ class AgentOutput:
         return self._tool_calls
 
 
-def get_response_tool_anthropic(response_schema: BaseModel, allowed_callers: List[str] = None) -> dict:
+def get_response_tool_anthropic(
+    response_schema: BaseModel,
+    allowed_callers: List[str] = None,
+    cache: bool = True
+) -> dict:
     """Create Anthropic tool definition for the response tool."""
     tool_def = {
         "name": RESPONSE_TOOL_NAME,
@@ -42,19 +44,25 @@ def get_response_tool_anthropic(response_schema: BaseModel, allowed_callers: Lis
     }
     if allowed_callers:
         tool_def["allowed_callers"] = allowed_callers
+    if cache:
+        tool_def["cache_control"] = {"type": "ephemeral"}
     return tool_def
 
 
 class Agent:
     def __init__(
         self,
+        model_name: str,
         response_schema: BaseModel = None,
         programmatic_tools: bool = False,
-        include_output_schema: bool = False
+        include_output_schema: bool = False,
+        truncate_output: bool = False
     ):
+        self.model_name = model_name
         self.response_schema = response_schema
         self.programmatic_tools = programmatic_tools
         self.include_output_schema = include_output_schema
+        self.truncate_output = truncate_output
 
         # Copy World to a new World
         self.world = World()
@@ -86,17 +94,28 @@ class Agent:
                 )
             ]
             if response_schema:
+                # Response tool is last, so it gets cache_control
                 self.tools.append(get_response_tool_anthropic(
                     response_schema,
-                    allowed_callers=[CODE_EXECUTION_TOOL_TYPE]
+                    allowed_callers=[CODE_EXECUTION_TOOL_TYPE],
+                    cache=True
                 ))
+            else:
+                # No response schema, cache the last world tool
+                if self.tools:
+                    self.tools[-1]["cache_control"] = {"type": "ephemeral"}
         else:
             # Regular mode: direct tool calling
             self.tools = self.world.to_anthropic_tools(
                 include_output_schema=include_output_schema
             )
             if response_schema:
-                self.tools.append(get_response_tool_anthropic(response_schema))
+                # Response tool is last, so it gets cache_control
+                self.tools.append(get_response_tool_anthropic(response_schema, cache=True))
+            else:
+                # No response schema, cache the last world tool
+                if self.tools:
+                    self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
         # Initialize client
         self.client = wrap_anthropic(anthropic.AsyncAnthropic())
@@ -110,11 +129,20 @@ class Agent:
     async def run(self, prompt: str):
         self.trace_id = uuid.uuid4()
 
-        # Build system prompt
+        # Build system prompt with cache_control
         has_response_tool = self.response_schema is not None
-        system_prompt = """You are a helpful assistant with access to various admin tools. Your job is to use those tools to answer the user's questions or accomplish tasks. The requests will only be solvable by using the tools. Do not attempt to answer using your own knowledge or information. Only use the tools to answer the user's questions or accomplish tasks."""
+        system_text = """You are a helpful assistant with access to various admin tools. Your job is to use those tools to answer the user's questions or accomplish tasks. The requests will only be solvable by using the tools. Do not attempt to answer using your own knowledge or information. Only use the tools to answer the user's questions or accomplish tasks."""
         if has_response_tool:
-            system_prompt += f" You MUST respond to the user ONLY using the {RESPONSE_TOOL_NAME} tool."
+            system_text += f" You MUST respond to the user ONLY using the {RESPONSE_TOOL_NAME} tool."
+
+        # System prompt as array with cache_control on the last block
+        system_prompt = [
+            {
+                "type": "text",
+                "text": system_text,
+                "cache_control": {"type": "ephemeral"}
+            }
+        ]
 
         # Run the agentic loop
         messages = [{"role": "user", "content": prompt}]
@@ -125,7 +153,7 @@ class Agent:
             if self.programmatic_tools:
                 # Programmatic mode: use beta API with code execution
                 request_kwargs = {
-                    "model": "claude-sonnet-4-5-20250929",
+                    "model": self.model_name,
                     "betas": [PROGRAMMATIC_BETA],
                     "max_tokens": 20000,
                     "system": system_prompt,
@@ -143,7 +171,7 @@ class Agent:
             else:
                 # Regular mode
                 response = await self.client.messages.create(
-                    model="claude-sonnet-4-5-20250929",
+                    model=self.model_name,
                     max_tokens=20000,
                     system=system_prompt,
                     tools=self.tools,
@@ -185,7 +213,7 @@ class Agent:
                         try:
                             result = self.tool_executors[tool_name](**tool_input)
                             result_str = str(result)
-                            if len(result_str) > 5000 and ENABLE_TRUNCATION:
+                            if len(result_str) > 5000 and self.truncate_output:
                                 result_str = (
                                     f"{result_str[:5000]}... *Truncated to manage token limits*"
                                 )
@@ -240,14 +268,18 @@ class Agent:
     @staticmethod
     async def create_and_run(
         prompt: str,
+        model_name: str,
         response_schema: BaseModel = None,
         programmatic_tools: bool = False,
-        include_output_schema: bool = True
+        include_output_schema: bool = True,
+        truncate_output: bool = False,
     ):
         agent = Agent(
+            model_name=model_name,
             response_schema=response_schema,
             programmatic_tools=programmatic_tools,
-            include_output_schema=include_output_schema
+            include_output_schema=include_output_schema,
+            truncate_output=truncate_output
         )
         await agent.run(prompt)
         return agent

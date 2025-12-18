@@ -27,11 +27,21 @@ def contains_number(text: str, number: int) -> bool:
 
 # Toggle programmatic tool calling mode
 # Set to True to use code execution for tool calling (reduces latency for multi-tool workflows)
-PROGRAMMATIC_TOOLS = True
+PROGRAMMATIC_TOOLS = False
 
 # Toggle output schema in tool descriptions
 # Set to True to include JSON schema of tool outputs in descriptions (helps Claude process results)
-INCLUDE_OUTPUT_SCHEMA = True
+INCLUDE_OUTPUT_SCHEMA = False
+
+# Toggle output truncation
+# Set to True to truncate long tool results to 5000 characters
+TRUNCATE_OUTPUT = False
+
+# Anthropic models
+SONNET = "claude-sonnet-4-5-20250929"
+HAIKU = "claude-haiku-4-5-20251001"
+
+SELECTED_MODEL = HAIKU
 
 
 # Target function
@@ -43,6 +53,7 @@ async def target(ctx: EvalContext):
     if ctx.input["response_schema"]:
         ctx.agent = await Agent.create_and_run(
             ctx.input["prompt"],
+            SELECTED_MODEL,
             ctx.input["response_schema"],
             programmatic_tools=PROGRAMMATIC_TOOLS,
             include_output_schema=INCLUDE_OUTPUT_SCHEMA
@@ -70,6 +81,13 @@ async def target(ctx: EvalContext):
 # Set target as the global target
 ezvals_defaults = {
     "target": target,
+    "metadata": {
+        "programmatic_tools": PROGRAMMATIC_TOOLS,
+        "include_output_schema": INCLUDE_OUTPUT_SCHEMA,
+        "truncate_output": TRUNCATE_OUTPUT,
+        "model": SELECTED_MODEL
+    }
+    
 }
 
 
