@@ -126,7 +126,6 @@ class Agent:
         self.final_agent_state = None
         self.output = None
         self.container_id = None  # For programmatic tool calling
-
     @traceable
     async def run(self, prompt: str):
         # Capture the actual LangSmith trace ID
@@ -153,10 +152,14 @@ class Agent:
         ]
 
         # Run the agentic loop
-        messages = [{"role": "user", "content": prompt}]
+        messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
         final_response = None
 
         while True:
+            for message in messages:
+                for block in message["content"]:
+                    block.pop("cache_control", None)
+            messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
             # Make API call based on mode
             if self.programmatic_tools:
                 # Programmatic mode: use beta API with code execution
@@ -242,12 +245,13 @@ class Agent:
                 if should_exit:
                     break
 
-                # Add cache_control to the last tool result to cache the conversation prefix
-                if tool_results:
-                    tool_results[-1]["cache_control"] = {"type": "ephemeral"}
-
                 # Continue conversation
-                messages.append({"role": "assistant", "content": response.content})
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [block.model_dump(exclude_none=True) for block in response.content],
+                    }
+                )
                 messages.append({"role": "user", "content": tool_results})
             else:
                 # max_tokens or other stop reason
