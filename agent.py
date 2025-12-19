@@ -3,12 +3,13 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-import uuid
 from pydantic import BaseModel
 from world_runtime import World
 import anthropic
 from typing import Any, Callable, Dict, List
 from langsmith.wrappers import wrap_anthropic
+from langsmith import traceable
+from langsmith.run_helpers import get_current_run_tree
 
 
 RESPONSE_TOOL_NAME = "respond_to_admin_user"
@@ -126,8 +127,15 @@ class Agent:
         self.output = None
         self.container_id = None  # For programmatic tool calling
 
+    @traceable
     async def run(self, prompt: str):
-        self.trace_id = uuid.uuid4()
+        # Capture the actual LangSmith trace ID
+        run_tree = get_current_run_tree()
+        if run_tree:
+            self.trace_id = run_tree.trace_id
+        else:
+            # Fallback if tracing is disabled
+            self.trace_id = None
 
         # Build system prompt with cache_control
         has_response_tool = self.response_schema is not None
