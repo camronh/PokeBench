@@ -242,6 +242,10 @@ class Agent:
                 if should_exit:
                     break
 
+                # Add cache_control to the last tool result to cache the conversation prefix
+                if tool_results:
+                    tool_results[-1]["cache_control"] = {"type": "ephemeral"}
+
                 # Continue conversation
                 messages.append({"role": "assistant", "content": response.content})
                 messages.append({"role": "user", "content": tool_results})
