@@ -159,7 +159,17 @@ class Agent:
             for message in messages:
                 for block in message["content"]:
                     block.pop("cache_control", None)
-            messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
+            if self.programmatic_tools:
+                for message in reversed(messages):
+                    for block in reversed(message["content"]):
+                        if block.get("type") == "text":
+                            block["cache_control"] = {"type": "ephemeral"}
+                            break
+                    else:
+                        continue
+                    break
+            else:
+                messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
             # Make API call based on mode
             if self.programmatic_tools:
                 # Programmatic mode: use beta API with code execution

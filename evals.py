@@ -27,11 +27,11 @@ def contains_number(text: str, number: int) -> bool:
 
 # Toggle programmatic tool calling mode
 # Set to True to use code execution for tool calling (reduces latency for multi-tool workflows)
-PROGRAMMATIC_TOOLS = False
+PROGRAMMATIC_TOOLS = True
 
 # Toggle output schema in tool descriptions
 # Set to True to include JSON schema of tool outputs in descriptions (helps Claude process results)
-INCLUDE_OUTPUT_SCHEMA = False
+INCLUDE_OUTPUT_SCHEMA = True
 
 # Toggle output truncation
 # Set to True to truncate long tool results to 5000 characters
@@ -41,7 +41,7 @@ TRUNCATE_OUTPUT = False
 SONNET = "claude-sonnet-4-5-20250929"
 HAIKU = "claude-haiku-4-5-20251001"
 
-SELECTED_MODEL = HAIKU
+SELECTED_MODEL = SONNET
 
 
 # Target function
@@ -49,33 +49,39 @@ async def target(ctx: EvalContext):
     # Create a copy of the world data before each eval run
     ctx.original_world = World()
 
-    # Run agent
-    if ctx.input["response_schema"]:
-        ctx.agent = await Agent.create_and_run(
-            ctx.input["prompt"],
-            SELECTED_MODEL,
-            ctx.input["response_schema"],
-            programmatic_tools=PROGRAMMATIC_TOOLS,
-            include_output_schema=INCLUDE_OUTPUT_SCHEMA
-        )
-        if ctx.agent.output.tool_calls:
-            output = ctx.agent.output.tool_calls[0]["args"]
-        else:
-            output = ctx.agent.output.content
-    else:
-        ctx.agent = await Agent.create_and_run(
-            ctx.input["prompt"],
-            programmatic_tools=PROGRAMMATIC_TOOLS,
-            include_output_schema=INCLUDE_OUTPUT_SCHEMA
-        )
-        output = ctx.agent.output.content
+    try:
 
-    trace_url = f"https://smith.langchain.com/o/d967989d-4221-53db-b0a5-665b504acba2/projects/p/0da7cda2-d355-4819-b61d-d67d595e4f29/r/{ctx.agent.trace_id}"
-    ctx.store(
-        output=output,
-        trace_url=trace_url,
-        messages=ctx.agent.final_agent_state["messages"]
-    )
+        # Run agent
+        if ctx.input["response_schema"]:
+            ctx.agent = await Agent.create_and_run(
+                ctx.input["prompt"],
+                SELECTED_MODEL,
+                ctx.input["response_schema"],
+                programmatic_tools=PROGRAMMATIC_TOOLS,
+                include_output_schema=INCLUDE_OUTPUT_SCHEMA,
+            )
+            if ctx.agent.output.tool_calls:
+                output = ctx.agent.output.tool_calls[0]["args"]
+            else:
+                output = ctx.agent.output.content
+        else:
+            ctx.agent = await Agent.create_and_run(
+                ctx.input["prompt"],
+                programmatic_tools=PROGRAMMATIC_TOOLS,
+                include_output_schema=INCLUDE_OUTPUT_SCHEMA,
+            )
+            output = ctx.agent.output.content
+
+        trace_url = f"https://smith.langchain.com/o/d967989d-4221-53db-b0a5-665b504acba2/projects/p/0da7cda2-d355-4819-b61d-d67d595e4f29/r/{ctx.agent.trace_id}"
+        ctx.store(
+            output=output,
+            trace_url=trace_url,
+            messages=ctx.agent.final_agent_state["messages"],
+        )
+    except Exception as e:
+        # Count errors as failures
+        ctx.store(scores=False)
+        raise e
 
 
 # Set target as the global target
@@ -85,9 +91,8 @@ ezvals_defaults = {
         "programmatic_tools": PROGRAMMATIC_TOOLS,
         "include_output_schema": INCLUDE_OUTPUT_SCHEMA,
         "truncate_output": TRUNCATE_OUTPUT,
-        "model": SELECTED_MODEL
-    }
-    
+        "model": SELECTED_MODEL,
+    },
 }
 
 
@@ -178,6 +183,7 @@ with open(_refs_path) as f:
 # PARAMETRIZED EVAL: All response-schema tests consolidated into one
 # =============================================================================
 
+
 @eval()
 @parametrize(
     "input,dataset,labels,reference",
@@ -190,7 +196,7 @@ with open(_refs_path) as f:
         )
         for r in EVAL_REFERENCES
     ],
-    ids=[r["id"] for r in EVAL_REFERENCES]
+    ids=[r["id"] for r in EVAL_REFERENCES],
 )
 async def structured_query_eval(ctx: EvalContext):
     # reference is automatically set via parametrize - access via ctx.reference
@@ -200,16 +206,23 @@ async def structured_query_eval(ctx: EvalContext):
     for key, expected in ctx.reference.items():
         actual = ctx.output[key]
         if isinstance(expected, str):
-            assert actual.lower() == expected.lower(), f"{key} mismatch: got '{actual}', expected '{expected}'"
+            assert (
+                actual.lower() == expected.lower()
+            ), f"{key} mismatch: got '{actual}', expected '{expected}'"
         elif isinstance(expected, float):
-            assert abs(actual - expected) < 1e-6, f"{key} mismatch: got {actual}, expected {expected}"
+            assert (
+                abs(actual - expected) < 1e-6
+            ), f"{key} mismatch: got {actual}, expected {expected}"
         else:
-            assert actual == expected, f"{key} mismatch: got {actual}, expected {expected}"
+            assert (
+                actual == expected
+            ), f"{key} mismatch: got {actual}, expected {expected}"
 
 
 # =============================================================================
 # MUTATION EVALS: These validate world state and cannot be pre-generated
 # =============================================================================
+
 
 @eval(
     input={
@@ -225,7 +238,9 @@ async def announce_na_users_with_october_purchases(ctx: EvalContext):
     purchases = ctx.original_world.list_purchases(
         ListPurchasesInput(purchased_after="2025-10-01")
     ).purchases
-    buyer_ids = {purchase.user_id for purchase in purchases if purchase.user_id in na_ids}
+    buyer_ids = {
+        purchase.user_id for purchase in purchases if purchase.user_id in na_ids
+    }
 
     count = len(buyer_ids)
     ctx.store(reference={"expected_count": count})
@@ -238,12 +253,16 @@ async def announce_na_users_with_october_purchases(ctx: EvalContext):
         None,
     )
 
-    ctx.store(output={
-        "message_found": matching is not None,
-        "message_text": matching.text if matching else None,
-    })
+    ctx.store(
+        output={
+            "message_found": matching is not None,
+            "message_text": matching.text if matching else None,
+        }
+    )
 
-    assert matching is not None, "No #ops-alerts message found with the NA purchase count"
+    assert (
+        matching is not None
+    ), "No #ops-alerts message found with the NA purchase count"
 
 
 @eval(
@@ -271,10 +290,12 @@ async def relay_latest_product_note_to_crm(ctx: EvalContext):
         (message for message in crm_messages if latest_text in message.text), None
     )
 
-    ctx.store(output={
-        "message_found": matching is not None,
-        "message_text": matching.text if matching else None,
-    })
+    ctx.store(
+        output={
+            "message_found": matching is not None,
+            "message_text": matching.text if matching else None,
+        }
+    )
 
     assert (
         matching is not None
@@ -310,16 +331,18 @@ async def create_churn_risk_flag(ctx: EvalContext):
     total_sessions = sum(eng.sessions for eng in window_rows)
     total_minutes = sum(eng.minutes_played for eng in window_rows)
 
-    ctx.store(reference={
-        "expected_user_id": target_user_id,
-        "expected_flag_type": expected_flag_type,
-        "engagement_context": {
-            "total_sessions": total_sessions,
-            "total_minutes": total_minutes,
-            "window_start": window_start.isoformat(),
-            "window_end": latest_date.isoformat(),
-        },
-    })
+    ctx.store(
+        reference={
+            "expected_user_id": target_user_id,
+            "expected_flag_type": expected_flag_type,
+            "engagement_context": {
+                "total_sessions": total_sessions,
+                "total_minutes": total_minutes,
+                "window_start": window_start.isoformat(),
+                "window_end": latest_date.isoformat(),
+            },
+        }
+    )
 
     agent_flags = [
         flag
@@ -327,12 +350,14 @@ async def create_churn_risk_flag(ctx: EvalContext):
         if flag.user_id == target_user_id and flag.flag_type == expected_flag_type
     ]
 
-    ctx.store(output={
-        "flag_created": bool(agent_flags),
-        "user_id": agent_flags[0].user_id if agent_flags else None,
-        "flag_type": agent_flags[0].flag_type if agent_flags else None,
-        "reason": agent_flags[0].reason if agent_flags else None,
-    })
+    ctx.store(
+        output={
+            "flag_created": bool(agent_flags),
+            "user_id": agent_flags[0].user_id if agent_flags else None,
+            "flag_type": agent_flags[0].flag_type if agent_flags else None,
+            "reason": agent_flags[0].reason if agent_flags else None,
+        }
+    )
 
     assert len(agent_flags) > 0, f"No churn_risk flag created for {target_user_id}"
     flag = agent_flags[0]
@@ -370,16 +395,24 @@ async def post_eu_free_zero_team_crm_note(ctx: EvalContext):
         ListMessagesInput(channel="#crm-campaigns", limit=10)
     ).messages
     matching = next(
-        (message for message in messages if contains_number(message.text, zero_team_count)),
+        (
+            message
+            for message in messages
+            if contains_number(message.text, zero_team_count)
+        ),
         None,
     )
 
-    ctx.store(output={
-        "message_found": matching is not None,
-        "message_text": matching.text if matching else None,
-    })
+    ctx.store(
+        output={
+            "message_found": matching is not None,
+            "message_text": matching.text if matching else None,
+        }
+    )
 
-    assert matching is not None, "No #crm-campaigns message found with the expected count"
+    assert (
+        matching is not None
+    ), "No #crm-campaigns message found with the expected count"
 
 
 @eval(
@@ -413,11 +446,13 @@ async def flag_apac_whale_top_spender(ctx: EvalContext):
     ]
     top_user = min(leaders, key=lambda user: user.signup_date)
 
-    ctx.store(reference={
-        "expected_user_id": top_user.id,
-        "expected_flag_type": "vip_support",
-        "total_amount": max_spend,
-    })
+    ctx.store(
+        reference={
+            "expected_user_id": top_user.id,
+            "expected_flag_type": "vip_support",
+            "total_amount": max_spend,
+        }
+    )
 
     created_flags = [
         flag
@@ -425,10 +460,12 @@ async def flag_apac_whale_top_spender(ctx: EvalContext):
         if flag.user_id == top_user.id and flag.flag_type == "vip_support"
     ]
 
-    ctx.store(output={
-        "flag_created": bool(created_flags),
-        "flag_reason": created_flags[0].reason if created_flags else None,
-    })
+    ctx.store(
+        output={
+            "flag_created": bool(created_flags),
+            "flag_reason": created_flags[0].reason if created_flags else None,
+        }
+    )
 
     assert created_flags, f"No vip_support flag created for {top_user.id}"
     assert (
@@ -453,7 +490,9 @@ async def update_na_subscriber_no_recent_purchase_notes(ctx: EvalContext):
         ListPurchasesInput(user_ids=subscriber_ids, purchased_after="2025-09-01")
     ).purchases
     recent_buyers = {purchase.user_id for purchase in recent_purchases}
-    eligible_ids = [user_id for user_id in subscriber_ids if user_id not in recent_buyers]
+    eligible_ids = [
+        user_id for user_id in subscriber_ids if user_id not in recent_buyers
+    ]
 
     note_text = "NA subscriber - no purchases since Sept 2025"
     ctx.store(reference={"eligible_ids": sorted(eligible_ids), "note": note_text})
@@ -461,9 +500,7 @@ async def update_na_subscriber_no_recent_purchase_notes(ctx: EvalContext):
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=eligible_ids)
     ).users
-    updated_ids = [
-        user.id for user in updated_users if user.admin_note == note_text
-    ]
+    updated_ids = [user.id for user in updated_users if user.admin_note == note_text]
 
     ctx.store(output={"updated_ids": sorted(updated_ids)})
 
@@ -495,10 +532,12 @@ async def update_apac_premium_whale_notes(ctx: EvalContext):
     }
 
     required_note = "APAC premium whale outreach 2025-11"
-    ctx.store(reference={
-        "eligible_user_ids": sorted(premium_whale_ids),
-        "note": required_note,
-    })
+    ctx.store(
+        reference={
+            "eligible_user_ids": sorted(premium_whale_ids),
+            "note": required_note,
+        }
+    )
 
     updated_users = ctx.agent.world.list_users(
         ListUsersInput(user_ids=list(premium_whale_ids))
@@ -559,16 +598,24 @@ async def post_latam_ultra_zero_ranked_alert(ctx: EvalContext):
         ListMessagesInput(channel="#ops-alerts", limit=5)
     ).messages
     alert_message = next(
-        (message for message in messages if contains_number(message.text, expected_count)),
+        (
+            message
+            for message in messages
+            if contains_number(message.text, expected_count)
+        ),
         None,
     )
 
-    ctx.store(output={
-        "message_found": alert_message is not None,
-        "message_text": alert_message.text if alert_message else None,
-    })
+    ctx.store(
+        output={
+            "message_found": alert_message is not None,
+            "message_text": alert_message.text if alert_message else None,
+        }
+    )
 
-    assert alert_message is not None, "No #ops-alerts message found with the expected count"
+    assert (
+        alert_message is not None
+    ), "No #ops-alerts message found with the expected count"
 
 
 @eval(
@@ -601,28 +648,36 @@ async def flag_top_latam_subscribers_ranked(ctx: EvalContext):
         key=lambda user: (-ranked_totals.get(user.id, 0), user.signup_date),
     )
     top_three = sorted_users[:3]
-    ctx.store(reference={
-        "expected_user_ids": [user.id for user in top_three],
-        "flag_type": "ranked_surge",
-        "ranked_totals": {user.id: ranked_totals.get(user.id, 0) for user in top_three},
-    })
+    ctx.store(
+        reference={
+            "expected_user_ids": [user.id for user in top_three],
+            "flag_type": "ranked_surge",
+            "ranked_totals": {
+                user.id: ranked_totals.get(user.id, 0) for user in top_three
+            },
+        }
+    )
 
     created_flags = [
-        flag for flag in ctx.agent.world.flags.values() if flag.flag_type == "ranked_surge"
+        flag
+        for flag in ctx.agent.world.flags.values()
+        if flag.flag_type == "ranked_surge"
     ]
     created_map = {flag.user_id: flag for flag in created_flags}
 
-    ctx.store(output={
-        "created_user_ids": sorted(created_map.keys()),
-    })
+    ctx.store(
+        output={
+            "created_user_ids": sorted(created_map.keys()),
+        }
+    )
 
     assert len(created_flags) >= 3, "Expected ranked_surge flags for top three users"
     for user in top_three:
         flag = created_map.get(user.id)
         assert flag is not None, f"Missing flag for {user.id}"
-        assert str(ranked_totals.get(user.id, 0)) in flag.reason, (
-            f"Flag reason for {user.id} missing ranked match total"
-        )
+        assert (
+            str(ranked_totals.get(user.id, 0)) in flag.reason
+        ), f"Flag reason for {user.id} missing ranked match total"
 
 
 @eval(
@@ -684,12 +739,16 @@ async def post_eu_whale_team_creation_summary(ctx: EvalContext):
         None,
     )
 
-    ctx.store(output={
-        "message_found": matching is not None,
-        "message_text": matching.text if matching else None,
-    })
+    ctx.store(
+        output={
+            "message_found": matching is not None,
+            "message_text": matching.text if matching else None,
+        }
+    )
 
-    assert matching is not None, "No #product-notes message found with the expected count"
+    assert (
+        matching is not None
+    ), "No #product-notes message found with the expected count"
 
 
 @eval(
@@ -715,7 +774,9 @@ async def post_apac_whale_zero_ranked_recent_alert(ctx: EvalContext):
     for row in engagement_rows:
         ranked_totals[row.user_id] += row.ranked_matches
 
-    zero_ranked_ids = [user_id for user_id in whale_ids if ranked_totals.get(user_id, 0) == 0]
+    zero_ranked_ids = [
+        user_id for user_id in whale_ids if ranked_totals.get(user_id, 0) == 0
+    ]
     count = len(zero_ranked_ids)
 
     ctx.store(reference={"expected_count": count})
@@ -728,9 +789,11 @@ async def post_apac_whale_zero_ranked_recent_alert(ctx: EvalContext):
         None,
     )
 
-    ctx.store(output={
-        "message_found": matching is not None,
-        "message_text": matching.text if matching else None,
-    })
+    ctx.store(
+        output={
+            "message_found": matching is not None,
+            "message_text": matching.text if matching else None,
+        }
+    )
 
     assert matching is not None, "No #ops-alerts message found with the expected count"
