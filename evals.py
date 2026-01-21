@@ -67,6 +67,7 @@ async def target(ctx: EvalContext):
         else:
             ctx.agent = await Agent.create_and_run(
                 ctx.input["prompt"],
+                SELECTED_MODEL,
                 programmatic_tools=PROGRAMMATIC_TOOLS,
                 include_output_schema=INCLUDE_OUTPUT_SCHEMA,
             )
