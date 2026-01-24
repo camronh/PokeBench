@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 
-from ezvals import eval, EvalContext, parametrize
+from ezvals import eval, EvalContext
 from agent import Agent
 from pydantic import BaseModel, Field
 from models import (
@@ -185,19 +185,17 @@ with open(_refs_path) as f:
 # =============================================================================
 
 
-@eval()
-@parametrize(
-    "input,dataset,labels,reference",
-    [
-        (
-            {"prompt": r["prompt"], "response_schema": SCHEMAS[r["schema_name"]]},
-            r["dataset"],
-            r["labels"],
-            r["reference"],
-        )
+@eval(
+    cases=[
+        {
+            "id": r["id"],
+            "input": {"prompt": r["prompt"], "response_schema": SCHEMAS[r["schema_name"]]},
+            "dataset": r["dataset"],
+            "labels": r["labels"],
+            "reference": r["reference"],
+        }
         for r in EVAL_REFERENCES
-    ],
-    ids=[r["id"] for r in EVAL_REFERENCES],
+    ]
 )
 async def structured_query_eval(ctx: EvalContext):
     # reference is automatically set via parametrize - access via ctx.reference

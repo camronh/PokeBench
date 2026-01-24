@@ -15,4 +15,4 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-ezvals = { path = "../evalkit", editable = true }
+ezvals = { path = "../../evalkit/amarillo", editable = true }
