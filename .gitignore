@@ -42,8 +42,9 @@ htmlcov/
 
 .env
 
-.ezvals
+.ezvals/*
+!.ezvals/sessions/
+.ezvals/sessions/*
+!.ezvals/sessions/adv-tools/
 data/world_seed.json
 data/pokemon_raw.json
-
-ezvals.json

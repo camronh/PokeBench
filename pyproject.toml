@@ -1,7 +1,7 @@
 [project]
 name = "pokebench"
 version = "0.1.0"
-description = "Add your description here"
+description = "A synthetic evaluation environment for testing agent tool use in a Pokemon-themed admin console"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -10,9 +10,6 @@ dependencies = [
     "pandas>=2.3.3",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
-    "ezvals",
+    "ezvals>=0.1.2",
     "langsmith>=0.5.0",
 ]
-
-[tool.uv.sources]
-ezvals = { path = "../evalkit", editable = true }

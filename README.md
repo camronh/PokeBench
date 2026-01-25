@@ -1,159 +1,135 @@
-# PokeBench 
+# PokeBench
 
-This repo is a small synthetic environment for testing agent tool use in a Pokemon-themed "admin console" style app.
-
-The goal is to generate a synthetic evaluation environment that can be used to test and compare the performance of different agents.
+A synthetic evaluation environment for testing AI agent tool use in a Pokemon-themed "admin console" style application.
 
 ---
 
-## 1. Prerequisites
+## Quick Start
+
+### Prerequisites
 
 - [`uv`](https://github.com/astral-sh/uv) installed
+- Python 3.12+
 
-
-## 2. Project setup with uv
-
-From the project root (the directory that contains `models.py` and `generate_world.py`):
+### Setup
 
 ```bash
-# Initialize a Python project if you have not already
-uv init .
+# Clone and enter the directory
+cd pokebench
 
-# Create and activate a virtual environment
-uv venv
-# On macOS / Linux
-source .venv/bin/activate
-# On Windows PowerShell
-# .venv\Scripts\Activate.ps1
+# Install dependencies
+uv sync
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys (ANTHROPIC_API_KEY required)
 ```
 
-Add core dependencies:
+### Running Evals
 
 ```bash
-uv add pydantic faker pandas
-```
+# Run all evals
+uv run ezvals run evals.py
 
-This will create or update a `pyproject.toml` with dependencies managed by uv.
+# Run specific dataset
+uv run ezvals run evals.py --dataset easy
+
+# Run specific eval by function name
+uv run ezvals run evals.py::get_user_by_id
+
+# Run with timeout (seconds)
+uv run ezvals run evals.py --timeout 30
+
+# Limit number of evals
+uv run ezvals run evals.py --limit 5
+
+# Browse results in web UI
+uv run ezvals serve evals.py
+```
 
 ---
 
-## 3. Raw Pokémon data format
-
-`raw_pokemon_data.csv` should be a CSV with the following columns:
+## Project Structure
 
 ```
-name: The English name of the Pokemon
-japanese_name: The Original Japanese name of the Pokemon
-pokedex_number: The entry number of the Pokemon in the National Pokedex
-percentage_male: The percentage of the species that are male. Blank if the Pokemon is genderless.
-type1: The Primary Type of the Pokemon
-type2: The Secondary Type of the Pokemon
-classification: The Classification of the Pokemon as described by the Sun and Moon Pokedex
-height_m: Height of the Pokemon in metres
-weight_kg: The Weight of the Pokemon in kilograms
-capture_rate: Capture Rate of the Pokemon
-base_egg_steps: The number of steps required to hatch an egg of the Pokemon
-abilities: A stringified list of abilities that the Pokemon is capable of having
-experience_growth: The Experience Growth of the Pokemon
-base_happiness: Base Happiness of the Pokemon
-against_?: Eighteen features that denote the amount of damage taken against an attack of a particular type
-hp: The Base HP of the Pokemon
-attack: The Base Attack of the Pokemon
-defense: The Base Defense of the Pokemon
-sp_attack: The Base Special Attack of the Pokemon
-sp_defense: The Base Special Defense of the Pokemon
-speed: The Base Speed of the Pokemon
-generation: The numbered generation which the Pokemon was first introduced
-is_legendary: Denotes if the Pokemon is legendary.
+pokebench/
+├── evals.py              # Eval definitions using ezvals
+├── models.py             # Pydantic models for entities and schemas
+├── world_runtime.py      # World class with tool implementations
+├── agent.py              # Agent wrapper for Claude API
+├── generate_world.py     # World seeding script
+├── generate_references.py # Reference data generation
+├── data/
+│   └── world_seed.json   # Deterministic world snapshot
+└── .ezvals/
+    └── sessions/         # Eval run results
 ```
-
-`generate_world.py` expects json, so use pandas to convert the CSV to JSON and save it as `raw_pokemon_data.json`.
 
 ---
 
-## 4. Generating the world seed
+## How It Works
 
-The generator script uses:
+### World System
 
-* A fixed RNG seed (1337)
-* Faker for user like data
-* `raw_pokemon_data.json` for Pokémon records
-
-This produces a deterministic world snapshot that will be the starting state for all evals.
-
-From the project root:
-
-```bash
-uv run python generate_world.py
-```
-
-By default the example code in `generate_world.py` expects the raw Pokémon file and writes out:
-
-```text
-./data/world_seed.json
-```
-
-If your script uses different paths, adjust and rerun. The important part is that:
-
-* `generate_world(world_seed.json)` is deterministic for a fixed seed.
-* The JSON is fully self contained and can be checked into the repo.
-
----
-
-## 5. Loading the world in code
-
-In your agent or eval harness you typically:
+The eval environment uses a deterministic "world" that represents the state of a Pokemon admin console:
 
 ```python
 from world_runtime import World
 
-# Create a fresh world instance - automatically loads from data/world_seed.json
+# Create a fresh world instance (loads from data/world_seed.json)
 world = World()
 
-# The World instance has all tool methods available
-tools = world.to_openai_tools()  # or map to LangChain tools
+# Access tools for the agent
+tools = world.get_tools()
 ```
 
-When running evals you will:
+Each eval run starts from the same world state, allowing reproducible testing.
 
-1. Start from a fresh `World()` instance (so each run is independent).
-2. Give your agent access to tools backed by that `World`.
-3. After the run, inspect the mutated `World` to compute scores.
+### Writing Evals
+
+Evals are defined in `evals.py` using the ezvals library. The pattern uses a shared `target` function (runs the agent) and individual scorer functions (verify results):
+
+```python
+from ezvals import eval, EvalContext
+
+# Global target function that runs for every eval
+async def target(ctx: EvalContext):
+    ctx.agent = await Agent.create_and_run(ctx.input["prompt"], ...)
+    ctx.store(output=ctx.agent.output)
+
+ezvals_defaults = {"target": target}
+
+# Scorer function - verifies the agent's output
+@eval(
+    input={"prompt": "Post an alert with the user count", "response_schema": None},
+    dataset="easy",
+    labels=["mutation"],
+)
+async def post_user_count_alert(ctx: EvalContext):
+    # Compute expected value
+    expected_count = len(ctx.original_world.list_users(...).users)
+
+    # Verify agent's action
+    messages = ctx.agent.world.list_messages(...)
+    assert any(str(expected_count) in m.text for m in messages)
+```
 
 ---
 
-## 6. Repo structure
+## Regenerating the World
 
-Suggested structure as this project grows:
-
-```text
-.
-├── models.py                 # Pydantic models for entities and tool IO schemas
-├── world_runtime.py          # World class with tool implementations
-├── generate_world.py         # World seeding script
-├── raw_pokemon_data.json     # Raw Pokémon data
-├── data/
-│   └── world_seed.json       # Generated, deterministic world snapshot
-├── scenarios/
-│   └── *.py                  # Scenario builders and eval logic
-└── README.md
-```
-
-You can evolve this structure as you add:
-
-* `scenarios/` for eval tasks
-
----
-
-## 7. Regenerating the world
-
-If you change the generation logic and want to rebuild the seed:
+If you need to regenerate the world seed:
 
 ```bash
 uv run python generate_world.py
 ```
 
-Remember that changing the generator or seed will change `world_seed.json` and therefore change the eval baseline. If you want reproducible comparisons across versions, either:
+Note: Changing the world seed will change the eval baseline. Consider versioning seeds for reproducible comparisons.
 
-* Keep the original `world_seed.json` checked in and treat it as immutable, or
-* Version your seeds, for example `world_seed_v1.json`, `world_seed_v2.json`.
+---
+
+## Data Sources
+
+The world is seeded using:
+- `raw_pokemon_data.csv` - Pokemon data with types, stats, and abilities
+- Faker library - Synthetic user data with fixed RNG seed (1337)
