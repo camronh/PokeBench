@@ -1,5 +1,5 @@
 {
   "concurrency": 7,
-  "results_dir": ".ezvals/sessions",
+  "results_dir": ".",
   "overwrite": true
 }

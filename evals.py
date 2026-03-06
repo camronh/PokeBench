@@ -73,10 +73,8 @@ async def target(ctx: EvalContext):
             )
             output = ctx.agent.output.content
 
-        trace_url = f"https://smith.langchain.com/o/d967989d-4221-53db-b0a5-665b504acba2/projects/p/0da7cda2-d355-4819-b61d-d67d595e4f29/r/{ctx.agent.trace_id}"
         ctx.store(
             output=output,
-            trace_url=trace_url,
             messages=ctx.agent.final_agent_state["messages"],
         )
     except Exception as e:

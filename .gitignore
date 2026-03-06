@@ -41,6 +41,9 @@ htmlcov/
 
 
 .env
+.claude/
+.codex/
+.conductor/
 
 .ezvals/*
 !.ezvals/sessions/
