@@ -28,7 +28,7 @@ Programmatic tool calling dramatically outperforms ReAct on the same model, achi
 
 Standard ReAct agents call one tool at a time in a loop: think, call a tool, observe the result, repeat. Each iteration requires a full LLM round trip.
 
-[Programmatic tool calling](https://docs.anthropic.com/en/docs/build-with-claude/tool-use/computer-use#programmatic-tool-calling) lets Claude write and execute code that orchestrates multiple tool calls in a single turn. Instead of:
+[Programmatic tool calling](https://platform.claude.com/docs/en/agents-and-tools/tool-use/programmatic-tool-calling) lets Claude write and execute code that orchestrates multiple tool calls in a single turn. Instead of:
 
 ```
 Think → call list_users → observe → think → call list_teams → observe → think → respond
